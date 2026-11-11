@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "skills": {
+    "macos-design-guidelines": {
+      "source": "ehmo/platform-design-skills",
+      "sourceType": "github",
+      "skillPath": "skills/macos/SKILL.md",
+      "computedHash": "d5ad3e4541b2810e3ce01c85ed442bcb9458d585c46293b273fd03d616c91abc"
+    },
+    "xcode-project-setup": {
+      "source": "firebase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-project-setup/SKILL.md",
+      "computedHash": "04566bda2e5e37197a4fedc98b04d6c037d6e280e9fab1d66801efb5bdd309f8"
+    }
+  }
+}

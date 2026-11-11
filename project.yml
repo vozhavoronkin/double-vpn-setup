@@ -1,0 +1,38 @@
+name: VPNChainSetup
+options:
+  bundleIdPrefix: ru.vpnchain
+  developmentLanguage: ru
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+packages:
+  VPNChainCore:
+    path: .
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "NO"
+
+targets:
+  VPNChainSetup:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/VPNChainSetup
+    dependencies:
+      - package: VPNChainCore
+    info:
+      path: Sources/VPNChainSetup/Info.plist
+      properties:
+        CFBundleDisplayName: VPN Chain Setup
+        LSMinimumSystemVersion: "13.0"
+        NSHumanReadableCopyright: ""
+
+schemes:
+  VPNChainSetup:
+    build:
+      targets:
+        VPNChainSetup: all
