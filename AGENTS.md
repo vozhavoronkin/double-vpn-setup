@@ -61,6 +61,11 @@ openspec validate macos-vpn-chain-setup-app --strict
 - Пины версий (`AmneziaPins`) менять только осознанно: `amneziawg-go` — старая userspace-линия
   (v3.x падает на ядрах со встроенным WireGuard).
 
+## Ветки и pull request'ы
+
+- `main` защищена rulesets: прямой push запрещён, изменения — только через pull request (1 аппрув; владелец может мержить с bypass). Force push и удаление `main` заблокированы для всех.
+- Работа — в отдельной ветке, затем PR; после мержа ветку удалить.
+
 ## Keep this file current
 
 При изменении команд сборки/тестов или появлении линтера — обновляйте разделы «Команды» и
