@@ -5,6 +5,7 @@ import Foundation
 /// и для сборки `SSHConnectOptions` при выполнении операций.
 public final class ProfileStore: @unchecked Sendable {
     private static let storageKey = "vpnchain.profiles"
+    private static let proxySettingsKey = "vpnchain.proxy-egress"
 
     private let defaults: UserDefaults
     private let keychain: KeychainStore
@@ -69,6 +70,29 @@ public final class ProfileStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return profilesLocked().first { $0.role == role }
+    }
+
+    // MARK: Режим проксирования
+
+    /// Настройка режима «Прокси» (вкл/выкл и исключённые сети). По умолчанию выключен.
+    public var proxyEgressSettings: ProxyEgressSettings {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let data = defaults.data(forKey: Self.proxySettingsKey),
+                let settings = try? JSONDecoder().decode(ProxyEgressSettings.self, from: data)
+            else {
+                return ProxyEgressSettings()
+            }
+            return settings
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Self.proxySettingsKey)
+            }
+        }
     }
 
     // MARK: Секреты (Keychain)

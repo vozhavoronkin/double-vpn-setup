@@ -6,6 +6,10 @@ public struct ServerCheck: Sendable, Identifiable {
         case exitCodeZero
         case outputContains(String)
         case outputContainsAll([String])
+        /// Вывод НЕ содержит подстроку (например, `MISSING` в проверке сетей).
+        case outputNotContains(String)
+        /// Вывод после trim равен строке (например, фактический публичный IP).
+        case outputEquals(String)
         /// Вывод — `awg show`: handshake не старше N секунд.
         case handshakeWithin(seconds: Int)
     }
@@ -68,6 +72,13 @@ public enum ChecksEngine {
         case .outputContainsAll(let needles):
             let passed = needles.allSatisfy { result.stdout.contains($0) }
             return (passed, passed ? nil : check.failureHint)
+        case .outputNotContains(let needle):
+            let passed = !result.stdout.contains(needle)
+            return (passed, passed ? nil : check.failureHint)
+        case .outputEquals(let expected):
+            let value = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            let passed = value == expected
+            return (passed, passed ? nil : check.failureHint)
         case .handshakeWithin(let maxSeconds):
             let status = StatusParsers.parseRelayStatus(result.stdout)
             if let age = status.handshakeSecondsAgo {
@@ -114,7 +125,11 @@ public enum ChecksEngine {
     // MARK: Набор автоматизируемых проверок (раздел 10 ТЗ)
 
     /// Проверки для настроенной цепочки; часть требует окружения С1 (env).
-    public static func automatedChecks(environment: ChainState.Environment?) -> [ServerCheck] {
+    /// `proxyState` — состояние режима «Прокси»: при выключенном режиме proxy-проверки не добавляются.
+    public static func automatedChecks(
+        environment: ChainState.Environment?,
+        proxyState: ProxiesState? = nil
+    ) -> [ServerCheck] {
         var checks: [ServerCheck] = [
             ServerCheck(
                 id: "handshake",
@@ -203,6 +218,78 @@ public enum ChecksEngine {
                     server: .exit
                 )
             )
+        }
+        checks.append(contentsOf: proxyChecks(state: proxyState))
+        return checks
+    }
+
+    /// Проверки режима проксирования (spec proxy-egress): активны только при включённом режиме.
+    public static func proxyChecks(state: ProxiesState?) -> [ServerCheck] {
+        guard let state, state.enabled else { return [] }
+        var checks: [ServerCheck] = [
+            ServerCheck(
+                id: "proxy-host-egress",
+                title: "Маркировка хостового трафика на сервере-входе",
+                command:
+                    "iptables -t mangle -S OUTPUT; iptables -t mangle -S \(ProxyEgressRules.hostChain) 2>/dev/null",
+                kind: .outputContainsAll([ProxyEgressRules.hostChain, "--set-mark 0x51"]),
+                failureHint:
+                    "Правила режима потеряны — перезапустите vpn-chain-proxy.service на сервере-входе",
+                server: .entry
+            )
+        ]
+        let bridges = state.networks.map(\.bridge).filter { !$0.isEmpty }
+        if !bridges.isEmpty {
+            let probes = bridges.map { bridge in
+                "if ip link show '\(bridge)' >/dev/null 2>&1; then echo \"OK \(bridge)\"; else echo \"MISSING \(bridge)\"; fi"
+            }
+            checks.append(
+                ServerCheck(
+                    id: "proxy-docker-networks",
+                    title: "Docker-сети режима существуют, bridge совпадает",
+                    command: probes.joined(separator: "\n"),
+                    kind: .outputNotContains("MISSING"),
+                    failureHint:
+                        "Docker-сеть пересоздана (bridge изменился) — обновите список сетей и примените правила заново",
+                    server: .entry
+                ))
+        }
+        let subnets = state.networks.map(\.subnet).filter { !$0.isEmpty }
+        if !subnets.isEmpty {
+            checks.append(
+                ServerCheck(
+                    id: "proxy-exit-nat",
+                    title: "Маршруты и MASQUERADE подсетей режима на сервере-выходе",
+                    command: "ip route show; iptables -t nat -S POSTROUTING",
+                    kind: .outputContainsAll(subnets),
+                    failureHint:
+                        "На сервере-выходе нет маршрута/NAT для подсети — примените правила режима заново",
+                    server: .exit
+                ))
+        }
+        if let exitIP = state.exitIP, !exitIP.isEmpty {
+            let containerLoops = state.networks.map(\.name).map { name in
+                """
+                for c in $(docker ps --filter 'network=\(name)' --format '{{.Names}}'); do
+                  ip=$(docker exec "$c" sh -c 'curl -4fsS --max-time 10 https://api.ipify.org 2>/dev/null || wget -qO- -T 10 https://api.ipify.org 2>/dev/null' 2>/dev/null || true)
+                  if [ "$ip" = "\(exitIP)" ]; then echo "OK $c"; else echo "MISMATCH $c $ip"; fi
+                done
+                """
+            }
+            checks.append(
+                ServerCheck(
+                    id: "proxy-egress-ip",
+                    title: "Фактический IP с входа и из контейнеров совпадает с IP выхода",
+                    command: """
+                        host_ip=$(\(ProxyNetworkDetector.hostEgressCommand))
+                        if [ "$host_ip" = "\(exitIP)" ]; then echo "OK host"; else echo "MISMATCH host $host_ip"; fi
+                        \(containerLoops.joined(separator: "\n"))
+                        """,
+                    kind: .outputNotContains("MISMATCH"),
+                    failureHint:
+                        "Трафик выходит не через сервер-выход — проверьте маркировку, исключения сетей и туннель",
+                    server: .entry
+                ))
         }
         return checks
     }

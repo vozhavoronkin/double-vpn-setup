@@ -41,6 +41,17 @@ final class DiagnosticsViewModel: ObservableObject {
         return try? ChainStateParser.parseEnvironment(result.stdout)
     }
 
+    /// Состояние режима «Прокси» (отсутствие файла = выключено).
+    private func readProxyState(on c1: any RemoteRunner) async -> ProxiesState? {
+        guard
+            let result = try? await c1.run(
+                ProxiesState.readCommand, timeout: 30, onOutput: nil), result.succeeded
+        else {
+            return nil
+        }
+        return ProxiesState.decode(result.stdout)
+    }
+
     /// Диагностика выбранного симптома: гайд + автоматические проверки.
     func diagnose() {
         guard !diagnosing else { return }
@@ -71,8 +82,10 @@ final class DiagnosticsViewModel: ObservableObject {
                 }
 
                 let environment = await readEnvironment(on: c1)
+                let proxyState = await readProxyState(on: c1)
                 let guide = Troubleshooting.guide(
-                    for: selectedSymptom, environment: environment, s2Address: exit.host)
+                    for: selectedSymptom, environment: environment, s2Address: exit.host,
+                    proxyState: proxyState)
                 self.guide = guide
                 self.checkResults = await ChecksEngine.runAll(guide.checks, entry: c1, exit: c2)
             } catch {

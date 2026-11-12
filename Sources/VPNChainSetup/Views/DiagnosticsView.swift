@@ -243,6 +243,8 @@ struct DiagnosticsView: View {
         case .sshLost: "Пропал SSH на сервере-входе"
         case .slowSpeed: "Работает, но медленно"
         case .ipv6Leak: "IPv6-утечка у клиента"
+        case .proxyNotEgressing: "Прокси не выходит через сервер-выход"
+        case .accessLostAfterProxy: "После включения прокси пропал доступ"
         }
     }
 }
