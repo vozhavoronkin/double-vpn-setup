@@ -32,6 +32,17 @@ xcodebuild -project VPNChainSetup.xcodeproj -scheme VPNChainSetup \
 swift test                 # 146 unit-тестов core-модуля
 ```
 
+## Установка из релиза
+
+1. Скачайте `VPNChainSetup-<версия>-macos-universal.zip` со страницы [Releases](../../releases) и распакуйте.
+2. Перенесите `VPNChainSetup.app` в «Программы».
+3. **Сборка не подписана Apple.** При первом запуске macOS покажет предупреждение. Снимите карантин одним из способов:
+   - терминал: `xattr -dr com.apple.quarantine /Applications/VPNChainSetup.app`
+   - либо: правый клик по приложению → «Открыть» → «Открыть»; на macOS 15+ — «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
+4. Проверьте целостность по `SHA256SUMS.txt` из релиза: `shasum -a 256 -c SHA256SUMS.txt`.
+
+Требования: macOS 13+, серверы с доступом по SSH (подробнее — раздел «Требования»).
+
 ## Функциональность
 
 ### 1. Подключения

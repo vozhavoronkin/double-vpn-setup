@@ -15,6 +15,12 @@ settings:
     SWIFT_VERSION: "6.0"
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGNING_REQUIRED: "NO"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+  configs:
+    Release:
+      ARCHS: "arm64 x86_64"
+      ONLY_ACTIVE_ARCH: "NO"
 
 targets:
   VPNChainSetup:
@@ -28,6 +34,8 @@ targets:
       path: Sources/VPNChainSetup/Info.plist
       properties:
         CFBundleDisplayName: VPN Chain Setup
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSMinimumSystemVersion: "13.0"
         NSHumanReadableCopyright: ""
 
