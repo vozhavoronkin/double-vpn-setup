@@ -43,6 +43,24 @@ final class InstallViewModel: ObservableObject {
             && store.profile(for: .exit).map { store.isReady($0) } == true
     }
 
+    /// Сколько шагов уже завершено (успех или пропуск) — для прогресс-бара.
+    var completedCount: Int {
+        steps.filter { $0.state == .done || $0.state == .skipped }.count
+    }
+
+    /// Доля завершённых шагов (0…1).
+    var progressFraction: Double {
+        steps.isEmpty ? 0 : Double(completedCount) / Double(steps.count)
+    }
+
+    /// Подпись прогресса: во время прогона показывает текущий шаг, после — итог.
+    var progressTitle: String {
+        if running, let index = steps.firstIndex(where: { $0.state == .running }) {
+            return "Шаг \(index + 1) из \(steps.count)"
+        }
+        return "Выполнено \(completedCount) из \(steps.count)"
+    }
+
     /// Причина, по которой установка недоступна (для подсказки в UI).
     var readinessHint: String? {
         if running { return nil }
@@ -110,6 +128,14 @@ final class InstallViewModel: ObservableObject {
             steps[index].state = progress.state
             steps[index].detail = progress.detail
         }
+    }
+
+    /// Копирует журнал в буфер обмена. Журнал уже санитизирован при записи,
+    /// поэтому отдельного пути для секретов не появляется.
+    func copyLogToPasteboard() {
+        guard !logLines.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(logLines.joined(separator: "\n"), forType: .string)
     }
 
     private func appendLog(role: ServerRole, line: String) {

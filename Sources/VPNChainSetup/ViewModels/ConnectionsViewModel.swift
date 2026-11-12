@@ -85,6 +85,16 @@ final class ConnectionsViewModel: ObservableObject {
         forms[role] = form
     }
 
+    /// Профиль сохранён (независимо от результата проверки соединения).
+    func isConfigured(_ role: ServerRole) -> Bool {
+        store.profile(for: role) != nil
+    }
+
+    /// Текущее состояние проверки соединения (для статус-пилюли карточки).
+    func status(for role: ServerRole) -> CheckStatus {
+        statuses[role] ?? .idle
+    }
+
     /// Сохраняет профиль и секреты. Возвращает текст ошибки либо nil.
     @discardableResult
     func save(_ role: ServerRole) -> String? {
