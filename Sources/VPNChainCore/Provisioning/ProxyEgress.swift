@@ -95,12 +95,6 @@ public struct ProxiesState: Codable, Equatable, Sendable {
 
     /// Команда чтения состояния для диагностики (пустой вывод = выключено).
     public static var readCommand: String { "cat \(path) 2>/dev/null" }
-
-    public static func state(enabled: Bool, exitIP: String?, networks: [ProxyNetwork])
-        -> ProxiesState
-    {
-        ProxiesState(enabled: enabled, exitIP: exitIP, networks: networks)
-    }
 }
 
 /// Рендер идемпотентных правил режима и команд его применения (design D1–D6).
