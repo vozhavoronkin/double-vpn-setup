@@ -71,9 +71,19 @@ public struct SanitizingLogHandler: LogHandler {
 
     public func log(event: LogEvent) {
         let redacted = SecretRedactor.redact("\(event.message)")
-        let redactedMetadata = event.metadata?.mapValues { value in
-            Logging.Logger.Metadata.Value(stringLiteral: SecretRedactor.redact("\(value)"))
+        // Metadata уровня логгера (`logger[metadataKey:]`) живёт в handler.metadata
+        // и не попадает в LogEvent.metadata: без объединения StreamLogHandler
+        // примешал бы её уже после санитизации — сырой.
+        var metadata = self.metadata
+        if let callSiteMetadata = event.metadata {
+            metadata.merge(callSiteMetadata) { _, callSite in callSite }
         }
+        let redactedMetadata =
+            metadata.isEmpty
+            ? nil
+            : metadata.mapValues { value in
+                Logging.Logger.Metadata.Value(stringLiteral: SecretRedactor.redact("\(value)"))
+            }
         underlying.log(
             event: LogEvent(
                 level: event.level,

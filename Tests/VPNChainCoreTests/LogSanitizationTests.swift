@@ -6,7 +6,7 @@ import Testing
 
 /// Ловушка лог-сообщений для проверки санитизации.
 private final class CaptureHandler: LogHandler, @unchecked Sendable {
-    private let box: LockedBox<[(level: Logger.Level, message: String)]>
+    private let box: LockedBox<[(level: Logger.Level, message: String, metadata: Logger.Metadata?)]>
     var logLevel: Logger.Level = .info
     var metadata: Logger.Metadata = [:]
 
@@ -20,18 +20,18 @@ private final class CaptureHandler: LogHandler, @unchecked Sendable {
     }
 
     func log(event: LogEvent) {
-        box.withLock { $0.append((event.level, "\(event.message)")) }
+        box.withLock { $0.append((event.level, "\(event.message)", event.metadata)) }
     }
 
-    var captured: [(level: Logger.Level, message: String)] {
+    var captured: [(level: Logger.Level, message: String, metadata: Logger.Metadata?)] {
         box.withLock { $0 }
     }
 }
 
 /// Тесты задачи 2.4: секреты не попадают в журнал.
-/// Suite сериализован: SecretRedactor — глобальное состояние.
-@Suite(.serialized)
-struct LogSanitizationTests {
+/// Вложена в сериализованный `SharedSecretStateTests`: `SecretRedactor` —
+/// глобальное состояние, общее с `ProfileStoreTests`.
+extension SharedSecretStateTests.LogSanitizationTests {
     private func makeLogger() -> (Logger, CaptureHandler) {
         let capture = CaptureHandler()
         let logger = Logger(label: "test") { _ in SanitizingLogHandler(underlying: capture) }
@@ -75,11 +75,23 @@ struct LogSanitizationTests {
         SecretRedactor.register(secret)
         defer { SecretRedactor.unregister(secret) }
 
+        // Metadata уровня логгера (logger[metadataKey:]).
         var loggerWithMeta = logger
         loggerWithMeta[metadataKey: "password"] = .string(secret)
         loggerWithMeta.info("аутентификация")
-        let message = capture.captured.first?.message ?? ""
-        #expect(!message.contains(secret))
+
+        // Call-site metadata.
+        logger.info("подключение", metadata: ["password": .string(secret)])
+
+        let captured = capture.captured
+        #expect(captured.count == 2)
+        for event in captured {
+            let passwordValue = event.metadata?["password"].map { "\($0)" } ?? ""
+            #expect(!passwordValue.contains(secret), "Секрет утёк в metadata: \(passwordValue)")
+            #expect(passwordValue.contains("***"))
+        }
+        #expect(captured.first?.message == "аутентификация")
+        #expect(captured.last?.message == "подключение")
     }
 
     @Test func profileStoreRegistersSecretsForRedaction() throws {
