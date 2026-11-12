@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Генерация Xcode-проекта
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+
+      - name: Сборка universal (arm64 + x86_64)
+        run: |
+          xcodebuild -project VPNChainSetup.xcodeproj -scheme VPNChainSetup \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            -derivedDataPath build build
+
+      - name: Упаковка и контрольные суммы
+        run: |
+          APP="build/Build/Products/Release/VPNChainSetup.app"
+          lipo -info "$APP/Contents/MacOS/VPNChainSetup"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" \
+            "VPNChainSetup-${GITHUB_REF_NAME#v}-macos-universal.zip"
+          shasum -a 256 VPNChainSetup-*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Публикация релиза
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            Сборка без подписи Apple: при первом запуске снимите карантин —
+            `xattr -dr com.apple.quarantine /Applications/VPNChainSetup.app`
+            (или «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть»).
+
+            Целостность: `shasum -a 256 -c SHA256SUMS.txt`.
+            Требования: macOS 13+, universal (arm64 + x86_64).
+          files: |
+            VPNChainSetup-*-macos-universal.zip
+            SHA256SUMS.txt
