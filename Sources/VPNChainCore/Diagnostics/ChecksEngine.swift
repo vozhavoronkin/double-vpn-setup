@@ -226,18 +226,7 @@ public enum ChecksEngine {
     /// Проверки режима проксирования (spec proxy-egress): активны только при включённом режиме.
     public static func proxyChecks(state: ProxiesState?) -> [ServerCheck] {
         guard let state, state.enabled else { return [] }
-        var checks: [ServerCheck] = [
-            ServerCheck(
-                id: "proxy-host-egress",
-                title: "Маркировка хостового трафика на сервере-входе",
-                command:
-                    "iptables -t mangle -S OUTPUT; iptables -t mangle -S \(ProxyEgressRules.hostChain) 2>/dev/null",
-                kind: .outputContainsAll([ProxyEgressRules.hostChain, "--set-mark 0x51"]),
-                failureHint:
-                    "Правила режима потеряны — перезапустите vpn-chain-proxy.service на сервере-входе",
-                server: .entry
-            )
-        ]
+        var checks: [ServerCheck] = []
         let bridges = state.networks.map(\.bridge).filter { !$0.isEmpty }
         if !bridges.isEmpty {
             let probes = bridges.map { bridge in
@@ -258,16 +247,17 @@ public enum ChecksEngine {
         if !subnets.isEmpty {
             checks.append(
                 ServerCheck(
-                    id: "proxy-exit-nat",
-                    title: "Маршруты и MASQUERADE подсетей режима на сервере-выходе",
-                    command: "ip route show; iptables -t nat -S POSTROUTING",
-                    kind: .outputContainsAll(subnets),
+                    id: "proxy-nat-tunnel",
+                    title: "SNAT контейнерных подсетей в туннель (на сервере-входе)",
+                    command: "iptables -t nat -S POSTROUTING",
+                    kind: .outputContainsAll(
+                        subnets.map { "-s \($0) -o awg-relay -j MASQUERADE" }),
                     failureHint:
-                        "На сервере-выходе нет маршрута/NAT для подсети — примените правила режима заново",
-                    server: .exit
+                        "SNAT-правила не найдены — примените правила режима заново; без них туннель дропает контейнерный трафик",
+                    server: .entry
                 ))
         }
-        if let exitIP = state.exitIP, !exitIP.isEmpty {
+        if let exitIP = state.exitIP, !exitIP.isEmpty, !state.networks.isEmpty {
             let containerLoops = state.networks.map(\.name).map { name in
                 """
                 for c in $(docker ps --filter 'network=\(name)' --format '{{.Names}}'); do
@@ -279,15 +269,11 @@ public enum ChecksEngine {
             checks.append(
                 ServerCheck(
                     id: "proxy-egress-ip",
-                    title: "Фактический IP с входа и из контейнеров совпадает с IP выхода",
-                    command: """
-                        host_ip=$(\(ProxyNetworkDetector.hostEgressCommand))
-                        if [ "$host_ip" = "\(exitIP)" ]; then echo "OK host"; else echo "MISMATCH host $host_ip"; fi
-                        \(containerLoops.joined(separator: "\n"))
-                        """,
+                    title: "Фактический IP из контейнеров совпадает с IP выхода",
+                    command: containerLoops.joined(separator: "\n"),
                     kind: .outputNotContains("MISMATCH"),
                     failureHint:
-                        "Трафик выходит не через сервер-выход — проверьте маркировку, исключения сетей и туннель",
+                        "Трафик выходит не через сервер-выход — проверьте маркировку, исключения сетей и туннель; в контейнерах без curl/wget проверка невозможна",
                     server: .entry
                 ))
         }

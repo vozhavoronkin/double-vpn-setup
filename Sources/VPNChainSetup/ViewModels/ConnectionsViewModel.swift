@@ -184,9 +184,33 @@ enum UserMessages {
             text(of: check)
         case let ssh as SSHError:
             text(of: ssh)
+        case let provisioning as ProvisioningError:
+            text(of: provisioning)
         default:
             "Ошибка: \(error.localizedDescription)"
         }
+    }
+
+    static func text(of provisioning: ProvisioningError) -> String {
+        switch provisioning {
+        case .dockerMissing(let detail):
+            "Docker недоступен на сервере: \(detail)"
+        case .containerMissing:
+            "Контейнер AmneziaWG не найден — сначала установите AmneziaWG из приложения AmneziaVPN"
+        case .unsupportedPlatform(let detail):
+            "Неподдерживаемая платформа: \(detail)"
+        case .parseFailed(let detail):
+            "Не удалось разобрать вывод команды: \(detail)"
+        case .commandFailed(let step, let exitCode, let stderr):
+            "Шаг «\(step)» завершился с ошибкой (код выхода \(exitCode.map(String.init) ?? "неизвестен")). \(shortened(stderr))"
+        }
+    }
+
+    /// Хвост stderr/journal'а: причина почти всегда в последних строках.
+    private static func shortened(_ text: String, limit: Int = 800) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > limit else { return trimmed }
+        return "…" + trimmed.suffix(limit)
     }
 
     static func text(of validation: ConnectionProfile.ValidationError) -> String {

@@ -138,7 +138,7 @@ final class ProxiesViewModel: ObservableObject {
                 exitIP = ip
                 message =
                     applied.enabled
-                    ? "Правила применены: хостовый трафик и \(applied.networks.count) Docker-сет."
+                    ? "Правила применены: \(applied.networks.count) Docker-сет. через сервер-выход"
                     : "Режим выключен: правила, маршруты и NAT сняты на обоих серверах"
             } catch {
                 errorText = UserMessages.text(of: error)
@@ -164,17 +164,6 @@ final class ProxiesViewModel: ObservableObject {
                 exitIP = expected
 
                 var checks: [EgressCheck] = []
-                let hostResult = try await connection.entry.run(
-                    ProxyNetworkDetector.hostEgressCommand, timeout: 30, onOutput: nil)
-                let hostIP = ProxyNetworkDetector.parsePublicIP(hostResult.stdout)
-                checks.append(
-                    EgressCheck(
-                        id: "host",
-                        title: "Сервер-вход (хостовые сервисы)",
-                        ip: hostIP,
-                        matches: hostIP == expected
-                    ))
-
                 let namesResult = try? await connection.entry.run(
                     EnvironmentDetector.listContainersCommand, timeout: 30, onOutput: nil)
                 let names =
@@ -208,9 +197,11 @@ final class ProxiesViewModel: ObservableObject {
                 }
                 egressChecks = checks
                 message =
-                    checks.allSatisfy(\.matches)
-                    ? "Все источники выходят через сервер-выход"
-                    : "Часть источников выходит не через сервер-выход"
+                    checks.isEmpty
+                    ? "Нет контейнеров в включённых сетях — проверять нечего"
+                    : checks.allSatisfy(\.matches)
+                        ? "Все контейнеры выходят через сервер-выход"
+                        : "Часть контейнеров выходит не через сервер-выход (или без curl/wget внутри)"
             } catch {
                 errorText = UserMessages.text(of: error)
             }

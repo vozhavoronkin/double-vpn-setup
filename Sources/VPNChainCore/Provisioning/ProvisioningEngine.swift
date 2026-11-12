@@ -476,7 +476,7 @@ public final class ProvisioningEngine: @unchecked Sendable {
             }
             emit(
                 "proxy-exit", .done,
-                enabled ? "маршруты и NAT: \(networks.count) сет." : "правила сняты")
+                enabled ? "сервер-выход чист (SNAT — на входе)" : "правила сняты")
         } catch {
             emit("proxy-exit", .failed, "\(error)")
             throw error

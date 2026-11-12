@@ -156,13 +156,14 @@ public enum Troubleshooting {
             symptom: symptom,
             title: "Прокси не выходит через сервер-выход",
             explanation:
-                "Маркировка не применилась, сеть исключена, Docker-сеть пересоздана или на сервере-выходе нет маршрута/NAT.",
+                "Маркировка не применилась, сеть исключена, Docker-сеть пересоздана или пропал SNAT в туннель.",
             checks: checks,
             advice: [
                 "1. Убедитесь, что сеть контейнера включена в разделе «Прокси» (сеть AmneziaVPN исключена всегда).",
                 "2. Обновите список сетей и примените правила заново: при пересоздании сети меняется bridge.",
-                "3. Проверьте фактический выход: хост и контейнеры должны показывать IP сервера-выхода.",
-                "4. Если режим включён без списка сетей, через сервер-выход идёт только хостовый трафик.",
+                "3. Проверьте фактический выход: контейнеры должны показывать IP сервера-выхода (в контейнерах без curl/wget проверяйте вручную через сам прокси).",
+                "4. Если режим включён без выбранных сетей, через сервер-выход не идёт ничего — отметьте сети галочками.",
+                "5. Контейнерный трафик должен проходить SNAT в туннель (MASQUERADE -o awg-relay на сервере-входе): без него туннель отбрасывает чужие адреса источника.",
             ],
             suggestsReapply: false
         )
@@ -173,7 +174,7 @@ public enum Troubleshooting {
             symptom: symptom,
             title: "После включения режима пропал доступ",
             explanation:
-                "Режим заворачивает весь исходящий трафик сервера-входа: при недоступном сервере-выходе маркированный трафик умирает на blackhole (kill-switch). SSH к серверу-входу не маркируется.",
+                "Режим заворачивает трафик контейнеров включённых Docker-сетей: при недоступном сервере-выходе маркированный трафик умирает на blackhole (kill-switch). SSH и хостовой трафик сервера-входа не затрагиваются.",
             checks: [
                 ServerCheck(
                     id: "handshake-proxy",
@@ -181,23 +182,23 @@ public enum Troubleshooting {
                     command: StatusParsers.awgShowCommand,
                     kind: .handshakeWithin(seconds: 300),
                     failureHint:
-                        "Туннель до сервера-выхода не поднят — маркированный трафик уходит в blackhole; выключите режим и проверьте сервер-выход",
+                        "Туннель до сервера-выхода не поднят — трафик контейнеров уходит в blackhole; выключите режим и проверьте сервер-выход",
                     server: .entry
                 ),
                 ServerCheck(
-                    id: "proxy-host-chain",
+                    id: "proxy-docker-chain",
                     title: "Цепочка режима на месте",
-                    command: "iptables -t mangle -S \(ProxyEgressRules.hostChain) 2>/dev/null",
-                    kind: .outputContains(ProxyEgressRules.hostChain),
+                    command: "iptables -t mangle -S \(ProxyEgressRules.dockerChain) 2>/dev/null",
+                    kind: .outputContains(ProxyEgressRules.dockerChain),
                     failureHint: "Правила режима потеряны — перезапустите vpn-chain-proxy.service",
                     server: .entry
                 ),
             ],
             advice: [
-                "1. SSH к серверу-входу должен оставаться доступным: пакеты самому хосту не маркируются.",
-                "2. Выключите режим в разделе «Прокси» и примените — правила, маршруты и NAT снимутся.",
+                "1. SSH и хостовые сервисы сервера-входа остаются доступными всегда: их трафик режим не маркирует.",
+                "2. Выключите режим в разделе «Прокси» и примените — правила, SNAT и маршруты снимутся.",
                 "3. Проверьте сервер-выход: systemctl status awg-quick@awg-relay и handshake в awg show awg-relay.",
-                "4. Если SSH тоже недоступен — через консоль провайдера снимите свои цепочки: iptables -t mangle -D OUTPUT -j VPNCHAIN_HOST_OUT; iptables -t mangle -D PREROUTING -j VPNCHAIN_DOCKER_OUT.",
+                "4. Если контейнеры всё же недоступны — через консоль провайдера снимите цепочки: iptables -t mangle -D PREROUTING -j VPNCHAIN_DOCKER_OUT; ip6tables -t mangle -D PREROUTING -j VPNCHAIN_PROXY6_DOCKER.",
             ],
             suggestsReapply: false
         )

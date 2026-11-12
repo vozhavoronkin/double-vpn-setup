@@ -97,17 +97,22 @@ public struct ProxyNetworkDetector: Sendable {
         name == "host" || name == "none"
     }
 
+    /// Дефолтная Docker-сеть: не исключается из режима никогда (см. `detect`).
+    public static let defaultNetwork = "bridge"
+
     // MARK: Оркестрация
 
     /// Все Docker-сети сервера-входа с подсетями и bridge-интерфейсами.
     ///
-    /// `amneziaBridge` — bridge клиентской сети AmneziaVPN (`BRIDGE` из env): исключается
-    /// только он. Контейнер AmneziaVPN может быть подключён сразу к двум сетям (своей и
-    /// дефолтной `bridge`) — тогда исключать все его сети нельзя, иначе прокси в `bridge`
-    /// никогда не попадут в список.
-    ///
-    /// `amneziaContainer` — резервный способ (сети контейнера целиком), используется только
-    /// если bridge не передан: у уже установленных пар он всегда есть в env.
+    /// Сеть AmneziaVPN определяется объединением сигналов:
+    /// - сети контейнера AmneziaVPN;
+    /// - сеть, чей bridge совпадает с `BRIDGE` из env (у части установок это
+    ///   docker-bridge, у части — интерфейс контейнера вроде `amn0`, которого среди
+    ///   Docker-сетей нет).
+    /// Дефолтная `bridge` из исключения убирается всегда: ответы клиентской сессии
+    /// защищены исключением по `CLIENT_PORT`, а прокси в `bridge` должны быть доступны
+    /// для выбора — иначе установка, где Amnezia подключена сразу к двум сетям, теряет
+    /// все прокси, живущие в дефолтной сети.
     public func detect(amneziaContainer: String?, amneziaBridge: String? = nil) async throws
         -> ProxyNetworkDetection
     {
@@ -132,18 +137,20 @@ public struct ProxyNetworkDetector: Sendable {
             }
         }
 
-        let amneziaNetworks: Set<String>
-        if let amneziaBridge, !amneziaBridge.isEmpty {
-            amneziaNetworks = Set(networks.filter { $0.bridge == amneziaBridge }.map(\.name))
-        } else if let amneziaContainer, !amneziaContainer.isEmpty,
+        var amneziaNetworks: Set<String> = []
+        if let amneziaContainer, !amneziaContainer.isEmpty,
             let containerResult = try? await runner.run(
                 Self.containerNetworkNamesCommand(container: amneziaContainer), timeout: 15,
                 onOutput: nil), containerResult.succeeded
         {
-            amneziaNetworks = Set(Self.parseContainerNetworkNames(containerResult.stdout))
-        } else {
-            amneziaNetworks = []
+            amneziaNetworks.formUnion(
+                Self.parseContainerNetworkNames(containerResult.stdout))
         }
+        if let amneziaBridge, !amneziaBridge.isEmpty {
+            amneziaNetworks.formUnion(
+                networks.filter { $0.bridge == amneziaBridge }.map(\.name))
+        }
+        amneziaNetworks.remove(Self.defaultNetwork)
 
         return ProxyNetworkDetection(
             networks: networks.sorted { $0.name < $1.name },

@@ -114,7 +114,8 @@ public enum ProxyEgressRules {
     public static let exitScriptPath = "/usr/local/bin/vpn-chain-proxy-exit-rules.sh"
     public static let exitUnitPath = "/etc/systemd/system/vpn-chain-proxy-exit.service"
 
-    /// Цепочки маркировки/блокировки, которые снимаются при выключении.
+    /// Цепочки режима: docker — маркировка/блокировка контейнеров, host — цепочки
+    /// прежних версий (больше не создаются, но снимаются для миграции и удаления).
     public static let hostChain = "VPNCHAIN_HOST_OUT"
     public static let dockerChain = "VPNCHAIN_DOCKER_OUT"
     public static let hostChain6 = "VPNCHAIN_PROXY6_HOST"
@@ -149,9 +150,11 @@ public enum ProxyEgressRules {
 
     // MARK: Скрипт входа
 
-    /// Скрипт правил сервера-входа: две цепочки маркировки поверх существующего
-    /// `fwmark → таблица 51821` плюс IPv6-kill-switch. При `enabled == false`
-    /// скрипт только снимает свои правила и пишет состояние «выключено».
+    /// Скрипт правил сервера-входа: область режима — только Docker-контейнеры
+    /// (маркировка `VPNCHAIN_DOCKER_OUT` поверх существующего `fwmark → таблица 51821`,
+    /// IPv6-блокировка контейнеров, SNAT подсетей в туннель). Хостовой трафик сервера
+    /// не затрагивается. При `enabled == false` скрипт снимает свои правила (включая
+    /// хостовые цепочки прежних версий) и пишет состояние «выключено».
     public static func renderEntryScript(
         enabled: Bool,
         networks: [ProxyNetwork],
@@ -186,20 +189,10 @@ public enum ProxyEgressRules {
         let markSection: String
         if enabled {
             markSection = """
-                # Хостовые сервисы: ответы клиентам, локальный трафик, IP выхода и приватные
-                # сети не маркируются — иначе ответы прокси уходили бы в туннель.
-                iptables -t mangle -N \(hostChain) 2>/dev/null || true
-                iptables -t mangle -F \(hostChain)
-                iptables -t mangle -A \(hostChain) -m conntrack --ctdir REPLY -j RETURN
-                iptables -t mangle -A \(hostChain) -o lo -j RETURN
-                iptables -t mangle -A \(hostChain) -d "$EXIT_IP" -j RETURN
-                for dest in \(privateDestinations.map { "'\($0)'" }.joined(separator: " ")); do
-                  iptables -t mangle -A \(hostChain) -d "$dest" -j RETURN
-                done
-                iptables -t mangle -A \(hostChain) -j MARK --set-mark "$MARK"
-                iptables -t mangle -C OUTPUT -j \(hostChain) 2>/dev/null || iptables -t mangle -I OUTPUT 1 -j \(hostChain)
-
-                # Docker-контейнеры: маркируется только входящее с bridge включённых сетей.
+                # Область режима — только Docker-контейнеры: маркируется входящий
+                # с bridge включённых сетей. Ответы клиентам прокси (ctdir REPLY),
+                # IP сервера-выхода (иначе петля WireGuard) и приватные сети
+                # не маркируются.
                 iptables -t mangle -N \(dockerChain) 2>/dev/null || true
                 iptables -t mangle -F \(dockerChain)
                 iptables -t mangle -A \(dockerChain) -m conntrack --ctdir REPLY -j RETURN
@@ -211,35 +204,44 @@ public enum ProxyEgressRules {
                 \(networkLines)
                 iptables -t mangle -C PREROUTING -j \(dockerChain) 2>/dev/null || iptables -t mangle -I PREROUTING 1 -j \(dockerChain)
 
-                # IPv6: туннель IPv4-only. Блокируем исходящий с хоста и из контейнеров,
-                # кроме loopback и link-local, чтобы трафик не утекал мимо туннеля.
-                # Ответы на входящие IPv6-соединения (SSH, прокси) не блокируем — иначе
-                # сервер станет недоступен по IPv6.
-                ip6tables -N \(hostChain6) 2>/dev/null || true
-                ip6tables -F \(hostChain6)
-                ip6tables -A \(hostChain6) -m conntrack --ctdir REPLY -j RETURN
-                ip6tables -A \(hostChain6) -o lo -j RETURN
-                ip6tables -A \(hostChain6) -d fe80::/10 -j RETURN
-                ip6tables -A \(hostChain6) -j DROP
-                ip6tables -C OUTPUT -j \(hostChain6) 2>/dev/null || ip6tables -I OUTPUT 1 -j \(hostChain6)
+                # IPv6: туннель IPv4-only, блокируем исходящий из включённых контейнеров,
+                # чтобы трафик не утекал мимо туннеля. Цепочка — в таблице mangle:
+                # PREROUTING существует только там (в filter-таблице её нет, и вставка
+                # падает с «No chain/target/match by that name»).
+                ip6tables -t mangle -N \(dockerChain6) 2>/dev/null || true
+                ip6tables -t mangle -F \(dockerChain6)
+                ip6tables -t mangle -A \(dockerChain6) -m conntrack --ctdir REPLY -j RETURN
+                ip6tables -t mangle -A \(dockerChain6) -d fe80::/10 -j RETURN
+                \(networks.map { "ip6tables -t mangle -A \(dockerChain6) -i '\($0.bridge)' -j DROP" }.joined(separator: "\n"))
+                ip6tables -t mangle -C PREROUTING -j \(dockerChain6) 2>/dev/null || ip6tables -t mangle -I PREROUTING 1 -j \(dockerChain6)
 
-                ip6tables -N \(dockerChain6) 2>/dev/null || true
-                ip6tables -F \(dockerChain6)
-                ip6tables -A \(dockerChain6) -m conntrack --ctdir REPLY -j RETURN
-                ip6tables -A \(dockerChain6) -d fe80::/10 -j RETURN
-                \(networks.map { "ip6tables -A \(dockerChain6) -i '\($0.bridge)' -j DROP" }.joined(separator: "\n"))
-                ip6tables -C PREROUTING -j \(dockerChain6) 2>/dev/null || ip6tables -I PREROUTING 1 -j \(dockerChain6)
+                # SNAT в туннель: cryptokey routing (AllowedIPs) пропускает только
+                # адреса туннеля, поэтому контейнерный трафик входит в awg-relay уже
+                # с адресом туннеля. Маршруты и NAT на сервере-выходе не нужны — это
+                # заодно исключает конфликт одинаковых Docker-подсетей на входе и выходе.
+                for s in \(networks.map { "'\($0.subnet)'" }.joined(separator: " ")); do
+                  iptables -t nat -C POSTROUTING -s "$s" -o awg-relay -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -s "$s" -o awg-relay -j MASQUERADE
+                done
                 """
         } else {
             markSection = """
                 # Выключено: снимаем только свои цепочки, правила Amnezia не трогаем.
-                ip6tables -D OUTPUT -j \(hostChain6) 2>/dev/null || true
-                ip6tables -D PREROUTING -j \(dockerChain6) 2>/dev/null || true
+                ip6tables -t mangle -D PREROUTING -j \(dockerChain6) 2>/dev/null || true
                 """
         }
         let cleanup = """
             MARK=0x51
             EXIT_IP='\(exitIP)'
+
+            # SNAT-очистка: прежние подсети читаем из состояния, чтобы после исключения
+            # сети из режима не остались висячие MASQUERADE-правила.
+            OLD_SUBNETS=''
+            if [ -f '\(ProxiesState.path)' ]; then
+              OLD_SUBNETS=$(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' '\(ProxiesState.path)' | tr '\\n' ' ')
+            fi
+            for s in $OLD_SUBNETS; do
+              while iptables -t nat -D POSTROUTING -s "$s" -o awg-relay -j MASQUERADE 2>/dev/null; do :; done
+            done
 
             # Идемпотентность: повторное применение удаляет прежние вставки, не дублируя их.
             while iptables -t mangle -D OUTPUT -j \(hostChain) 2>/dev/null; do :; done
@@ -249,11 +251,11 @@ public enum ProxyEgressRules {
             iptables -t mangle -F \(dockerChain) 2>/dev/null || true
             iptables -t mangle -X \(dockerChain) 2>/dev/null || true
             while ip6tables -D OUTPUT -j \(hostChain6) 2>/dev/null; do :; done
-            while ip6tables -D PREROUTING -j \(dockerChain6) 2>/dev/null; do :; done
+            while ip6tables -t mangle -D PREROUTING -j \(dockerChain6) 2>/dev/null; do :; done
             ip6tables -F \(hostChain6) 2>/dev/null || true
             ip6tables -X \(hostChain6) 2>/dev/null || true
-            ip6tables -F \(dockerChain6) 2>/dev/null || true
-            ip6tables -X \(dockerChain6) 2>/dev/null || true
+            ip6tables -t mangle -F \(dockerChain6) 2>/dev/null || true
+            ip6tables -t mangle -X \(dockerChain6) 2>/dev/null || true
             """
         return """
             #!/usr/bin/env bash
@@ -277,15 +279,15 @@ public enum ProxyEgressRules {
 
     // MARK: Скрипт выхода
 
-    /// Скрипт сервера-выхода: маршруты и MASQUERADE для подсетей включённых сетей.
-    /// Прежний список читается из `proxies.json`, устаревшие маршруты/NAT снимаются.
+    /// Скрипт сервера-выхода: SNAT выполняется на сервере-входе (см. `renderEntryScript`),
+    /// поэтому здесь только очистка следов прежней схемы (маршруты и MASQUERADE
+    /// добавлялись до перехода на SNAT) и запись состояния.
     public static func renderExitScript(
         enabled: Bool,
         networks: [ProxyNetwork],
         wanInterface: String,
         exitIP: String
     ) -> String {
-        let subnets = enabled ? networks.map(\.subnet) : []
         let stateJSON = ProxiesState(
             enabled: enabled, exitIP: exitIP.isEmpty ? nil : exitIP,
             networks: enabled ? networks : []
@@ -296,27 +298,17 @@ public enum ProxyEgressRules {
             # managed-by: amnezia-chain
 
             WAN='\(wanInterface)'
-            SUBNETS='\(subnets.joined(separator: " "))'
             STATE='\(ProxiesState.path)'
 
-            # Прежний список подсетей: без него после исключения сети остались бы
-            # висячие маршрут и MASQUERADE на сервере-выходе.
+            # Прежний список подсетей: если на сервере остались маршрут/MASQUERADE от
+            # старой схемы — снимаем. Новых правил на сервере-выходе не появляется.
             OLD_SUBNETS=''
             if [ -f "$STATE" ]; then
               OLD_SUBNETS=$(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$STATE" | tr '\\n' ' ')
             fi
-
             for s in $OLD_SUBNETS; do
-              case " $SUBNETS " in
-                *" $s "*) continue ;;
-              esac
               ip route del "$s" dev awg-relay 2>/dev/null || true
               while iptables -t nat -D POSTROUTING -s "$s" -o "$WAN" -j MASQUERADE 2>/dev/null; do :; done
-            done
-
-            for s in $SUBNETS; do
-              ip route replace "$s" dev awg-relay
-              iptables -t nat -C POSTROUTING -s "$s" -o "$WAN" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$s" -o "$WAN" -j MASQUERADE
             done
 
             mkdir -p /etc/amnezia/chain
@@ -325,7 +317,7 @@ public enum ProxyEgressRules {
             \(stateJSON)
             VPNCHAIN_STATE
             chmod 0600 "$STATE"
-            echo "vpn-chain: маршруты и NAT проксирования применены (enabled=\(enabled ? "true" : "false"), подсети: ${SUBNETS:-нет})"
+            echo "vpn-chain: сервер-выход чист (маршруты и NAT режима не требуются, enabled=\(enabled ? "true" : "false"))"
             """
     }
 

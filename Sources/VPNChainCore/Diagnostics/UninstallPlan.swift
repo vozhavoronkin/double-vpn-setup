@@ -63,12 +63,17 @@ public enum UninstallPlan {
                     iptables -t mangle -X VPNCHAIN_HOST_OUT 2>/dev/null || true
                     iptables -t mangle -F VPNCHAIN_DOCKER_OUT 2>/dev/null || true
                     iptables -t mangle -X VPNCHAIN_DOCKER_OUT 2>/dev/null || true
+                    if [ -f '/etc/amnezia/chain/proxies.json' ]; then
+                      for s in $(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' '/etc/amnezia/chain/proxies.json'); do
+                        while iptables -t nat -D POSTROUTING -s "$s" -o awg-relay -j MASQUERADE 2>/dev/null; do :; done
+                      done
+                    fi
                     while ip6tables -D OUTPUT -j VPNCHAIN_PROXY6_HOST 2>/dev/null; do :; done
-                    while ip6tables -D PREROUTING -j VPNCHAIN_PROXY6_DOCKER 2>/dev/null; do :; done
+                    while ip6tables -t mangle -D PREROUTING -j VPNCHAIN_PROXY6_DOCKER 2>/dev/null; do :; done
                     ip6tables -F VPNCHAIN_PROXY6_HOST 2>/dev/null || true
                     ip6tables -X VPNCHAIN_PROXY6_HOST 2>/dev/null || true
-                    ip6tables -F VPNCHAIN_PROXY6_DOCKER 2>/dev/null || true
-                    ip6tables -X VPNCHAIN_PROXY6_DOCKER 2>/dev/null || true
+                    ip6tables -t mangle -F VPNCHAIN_PROXY6_DOCKER 2>/dev/null || true
+                    ip6tables -t mangle -X VPNCHAIN_PROXY6_DOCKER 2>/dev/null || true
                     """
             ),
             UninstallCommand(

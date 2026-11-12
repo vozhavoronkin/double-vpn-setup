@@ -158,6 +158,33 @@ struct ProxyEgressTests {
         #expect(selected.map(\.name) == ["3x-ui", "bridge"])
     }
 
+    /// Реальный сервер: `BRIDGE=amn0` — интерфейс контейнера, а не docker-bridge,
+    /// поэтому совпадения по bridge нет. Прокси в `bridge` всё равно должны быть
+    /// доступны: исключаются только кастомные сети контейнера AmneziaVPN.
+    @Test func nonDockerBridgeInEnvKeepsDefaultNetworkAvailable() async throws {
+        let containerNetworks = """
+            {"amnezia_net":{"IPAddress":"172.26.0.2"},"bridge":{"IPAddress":"172.17.0.2"}}
+            """
+        let runner = FakeRunner([
+            ("docker network ls", ok("bridge\namnezia_net\n")),
+            ("amnezia_net", ok(networkInspectFixture("c34b8a7fffaf0000", "172.26.0.0/16"))),
+            ("bridge", ok(networkInspectFixture("eeeeffff00001111", "172.17.0.0/16"))),
+            ("NetworkSettings.Networks", ok(containerNetworks)),
+        ])
+        let detection = try await ProxyNetworkDetector(runner: runner).detect(
+            amneziaContainer: "amnezia-awg2",
+            amneziaBridge: "amn0"
+        )
+
+        #expect(detection.amneziaNetworks == ["amnezia_net"])
+        let selected = ProxyEgressRules.selectedNetworks(
+            all: detection.networks,
+            settings: ProxyEgressSettings(enabled: true),
+            amneziaNetworks: detection.amneziaNetworks
+        )
+        #expect(selected.map(\.name) == ["bridge"])
+    }
+
     @Test func exclusionRemovesNetworkFromSelection() {
         let networks = [
             ProxyNetwork(name: "3x-ui", subnet: "172.18.0.0/16", bridge: "br-aaaabbbbcccc"),
@@ -193,11 +220,13 @@ struct ProxyEgressTests {
             enabled: true, networks: networks, exitIP: "203.0.113.9", clientPort: "51820")
 
         #expect(script.contains("# managed-by: amnezia-chain"))
-        // Обе цепочки с исключением ответов клиентам прокси.
-        #expect(script.contains("VPNCHAIN_HOST_OUT -m conntrack --ctdir REPLY -j RETURN"))
+        // Область режима — только контейнеры: хостовые цепочки не создаются.
+        #expect(!script.contains("-A VPNCHAIN_HOST_OUT"))
+        #expect(!script.contains("-I OUTPUT 1 -j VPNCHAIN_HOST_OUT"))
+        #expect(!script.contains("ip6tables -A VPNCHAIN_PROXY6_HOST"))
+        // Ответы клиентам прокси не маркируются.
         #expect(script.contains("VPNCHAIN_DOCKER_OUT -m conntrack --ctdir REPLY -j RETURN"))
-        // SSH и локальный трафик: loopback, приватные сети, IP выхода.
-        #expect(script.contains("VPNCHAIN_HOST_OUT -o lo -j RETURN"))
+        // IP выхода (петля WireGuard) и приватные сети исключены.
         #expect(script.contains("-d \"$EXIT_IP\" -j RETURN"))
         #expect(script.contains("'10.0.0.0/8'"))
         #expect(script.contains("'192.168.0.0/16'"))
@@ -210,10 +239,23 @@ struct ProxyEgressTests {
         // Ответы клиентского AWG не маркируются.
         #expect(script.contains("--sport \"$CLIENT_PORT\" -j RETURN"))
         // Идемпотентность вставки jump'ов.
-        #expect(script.contains("iptables -t mangle -C OUTPUT -j VPNCHAIN_HOST_OUT 2>/dev/null ||"))
         #expect(
             script.contains(
                 "iptables -t mangle -C PREROUTING -j VPNCHAIN_DOCKER_OUT 2>/dev/null ||"))
+        // SNAT в туннель: контейнерный трафик входит в awg-relay с адресом туннеля —
+        // иначе cryptokey routing (AllowedIPs) дропает его на сервере-выходе.
+        #expect(
+            script.contains(
+                "iptables -t nat -C POSTROUTING -s \"$s\" -o awg-relay -j MASQUERADE 2>/dev/null ||"
+            ))
+        #expect(
+            script.contains(
+                "iptables -t nat -I POSTROUTING 1 -s \"$s\" -o awg-relay -j MASQUERADE"))
+        #expect(script.contains("'172.18.0.0/16' '172.19.0.0/16'"))
+        // Прежние SNAT-подсети снимаются по списку из состояния.
+        #expect(
+            script.contains(
+                "while iptables -t nat -D POSTROUTING -s \"$s\" -o awg-relay -j MASQUERADE"))
         // Состояние пишется с правами 0600.
         #expect(script.contains("chmod 0600 '/etc/amnezia/chain/proxies.json'"))
     }
@@ -244,22 +286,24 @@ struct ProxyEgressTests {
     @Test func enabledEntryScriptBlocksIPv6ExceptLocal() {
         let script = ProxyEgressRules.renderEntryScript(
             enabled: true, networks: networks, exitIP: "203.0.113.9", clientPort: nil)
+        // Хостовой IPv6 не блокируется: хост вне области режима.
+        #expect(!script.contains("ip6tables -A VPNCHAIN_PROXY6_HOST"))
+        #expect(!script.contains("ip6tables -I OUTPUT"))
+        // IPv6-docker-цепочка — в таблице mangle: PREROUTING существует только
+        // там (в filter-таблице её нет, и вставка падает с
+        // «No chain/target/match by that name»). Регрессия с реального сервера.
         #expect(
             script.contains(
-                "ip6tables -A VPNCHAIN_PROXY6_HOST -m conntrack --ctdir REPLY -j RETURN"))
-        #expect(script.contains("ip6tables -A VPNCHAIN_PROXY6_HOST -o lo -j RETURN"))
-        #expect(script.contains("ip6tables -A VPNCHAIN_PROXY6_HOST -d fe80::/10 -j RETURN"))
-        #expect(script.contains("ip6tables -A VPNCHAIN_PROXY6_HOST -j DROP"))
-        // Ответы на входящие IPv6-соединения должны проходить до DROP.
-        if let reply = script.range(of: "VPNCHAIN_PROXY6_HOST -m conntrack --ctdir REPLY"),
-            let drop = script.range(of: "VPNCHAIN_PROXY6_HOST -j DROP")
-        {
-            #expect(reply.lowerBound < drop.lowerBound)
-        } else {
-            Issue.record("в скрипте нет REPLY-исключения или DROP для IPv6 хоста")
-        }
-        #expect(script.contains("ip6tables -A VPNCHAIN_PROXY6_DOCKER -i 'br-aaaabbbbcccc' -j DROP"))
-        #expect(script.contains("ip6tables -I OUTPUT 1 -j VPNCHAIN_PROXY6_HOST"))
+                "ip6tables -t mangle -A VPNCHAIN_PROXY6_DOCKER -m conntrack --ctdir REPLY -j RETURN"
+            ))
+        #expect(
+            script.contains(
+                "ip6tables -t mangle -A VPNCHAIN_PROXY6_DOCKER -i 'br-aaaabbbbcccc' -j DROP"))
+        #expect(
+            script.contains("ip6tables -t mangle -I PREROUTING 1 -j VPNCHAIN_PROXY6_DOCKER"))
+        #expect(!script.contains("ip6tables -A VPNCHAIN_PROXY6_DOCKER"))
+        #expect(!script.contains("ip6tables -I PREROUTING"))
+        #expect(!script.contains("ip6tables -D PREROUTING"))
     }
 
     @Test func entryActionsUseManagedScriptAndUnit() throws {
@@ -273,24 +317,21 @@ struct ProxyEgressTests {
         #expect(command.contains("systemctl enable vpn-chain-proxy.service"))
     }
 
-    // MARK: 3.1–3.2 — правила сервера-выхода
+    // MARK: 3.1–3.2 — сервер-выход (только очистка прежней схемы)
 
-    @Test func exitScriptAddsRoutesAndNATForEnabledNetworks() {
+    /// Регрессия с реальной пары: маршруты и NAT на выходе ломали его собственный
+    /// Docker (совпадение дефолтных подсетей) и не помогали — туннель дропает чужие
+    /// источники по AllowedIPs. Теперь SNAT на входе, на выходе ничего не добавляется.
+    @Test func exitScriptAddsNothingAndCleansLegacyOnly() {
         let script = ProxyEgressRules.renderExitScript(
             enabled: true, networks: networks, wanInterface: "eth0", exitIP: "203.0.113.9")
 
         #expect(script.contains("WAN='eth0'"))
-        #expect(script.contains("SUBNETS='172.18.0.0/16 172.19.0.0/16'"))
-        #expect(script.contains("ip route replace \"$s\" dev awg-relay"))
-        #expect(
-            script.contains(
-                "iptables -t nat -A POSTROUTING -s \"$s\" -o \"$WAN\" -j MASQUERADE"))
-        // Идемпотентность NAT: повторное применение не дублирует правило.
-        #expect(
-            script.contains(
-                "iptables -t nat -C POSTROUTING -s \"$s\" -o \"$WAN\" -j MASQUERADE 2>/dev/null ||"
-            ))
-        // Прежний список читается из состояния: устаревшие маршруты/NAT снимаются.
+        // Ничего не добавляется: ни маршрутов, ни MASQUERADE.
+        #expect(!script.contains("ip route replace"))
+        #expect(!script.contains("-A POSTROUTING"))
+        #expect(!script.contains("-I POSTROUTING"))
+        // Следы прежней схемы снимаются по списку из состояния.
         #expect(script.contains("OLD_SUBNETS=$(sed -n"))
         #expect(script.contains("ip route del \"$s\" dev awg-relay 2>/dev/null || true"))
         #expect(script.contains("while iptables -t nat -D POSTROUTING -s \"$s\""))
@@ -303,9 +344,6 @@ struct ProxyEgressTests {
     @Test func exitScriptWithoutNetworksRemovesEverything() {
         let script = ProxyEgressRules.renderExitScript(
             enabled: false, networks: [], wanInterface: "ens3", exitIP: "")
-        // Подсетей нет — цикл добавления маршрутов/NAT не выполнится ни разу.
-        #expect(script.contains("SUBNETS=''"))
-        #expect(script.contains("for s in $SUBNETS; do"))
         #expect(script.contains("ip route del \"$s\" dev awg-relay"))
         #expect(script.contains("\"enabled\" : false"))
     }
@@ -424,14 +462,20 @@ struct ProxyEgressTests {
         let ids = checks.map(\.id)
         #expect(
             ids == [
-                "proxy-host-egress", "proxy-docker-networks", "proxy-exit-nat", "proxy-egress-ip",
+                "proxy-docker-networks", "proxy-nat-tunnel", "proxy-egress-ip",
             ])
         #expect(
             checks.first { $0.id == "proxy-docker-networks" }?.command.contains("br-aaaabbbbcccc")
                 == true)
+        // SNAT в туннель проверяется на сервере-входе (на выходе правил больше нет).
+        let natCheck = checks.first { $0.id == "proxy-nat-tunnel" }
+        #expect(natCheck?.server == .entry)
         #expect(
-            checks.first { $0.id == "proxy-exit-nat" }?.kind
-                == .outputContainsAll(["172.18.0.0/16", "172.19.0.0/16"]))
+            natCheck?.kind
+                == .outputContainsAll([
+                    "-s 172.18.0.0/16 -o awg-relay -j MASQUERADE",
+                    "-s 172.19.0.0/16 -o awg-relay -j MASQUERADE",
+                ]))
         #expect(checks.first { $0.id == "proxy-egress-ip" }?.kind == .outputNotContains("MISMATCH"))
         let egress = checks.first { $0.id == "proxy-egress-ip" }
         // Проверка покрывает не только хост, но и контейнеры включённых сетей.
@@ -477,7 +521,9 @@ struct ProxyEgressTests {
         }
         let notEgressing = Troubleshooting.guide(
             for: .proxyNotEgressing, environment: nil, s2Address: nil, proxyState: state)
-        #expect(notEgressing.checks.contains { $0.id == "proxy-host-egress" })
+        #expect(notEgressing.checks.contains { $0.id == "proxy-nat-tunnel" })
+        // Проверка хостового egress удалена вместе с самой функцией.
+        #expect(!notEgressing.checks.contains { $0.id == "proxy-host-egress" })
         // Без состояния режима гайд подсказывает включить режим, а не падает.
         let withoutState = Troubleshooting.guide(
             for: .proxyNotEgressing, environment: nil, s2Address: nil)
