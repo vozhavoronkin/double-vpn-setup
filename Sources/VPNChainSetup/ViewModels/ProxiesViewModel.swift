@@ -66,7 +66,9 @@ final class ProxiesViewModel: ObservableObject {
                 defer { Task { await connection.close() } }
                 let environment = await Self.readEnvironment(on: connection.entry)
                 let detection = try await ProxyNetworkDetector(runner: connection.entry)
-                    .detect(amneziaContainer: environment?.containerName)
+                    .detect(
+                        amneziaContainer: environment?.containerName,
+                        amneziaBridge: environment?.bridge)
                 let ip = try await ProxyNetworkDetector(runner: connection.exit).publicIP()
                 let settings = store.proxyEgressSettings
                 applyDetection(detection, exitIP: ip, settings: settings)
@@ -96,7 +98,9 @@ final class ProxiesViewModel: ObservableObject {
                 let environment = await Self.readEnvironment(on: connection.entry)
                 // Свежий детект: bridge мог измениться после пересоздания сети.
                 let detection = try await ProxyNetworkDetector(runner: connection.entry)
-                    .detect(amneziaContainer: environment?.containerName)
+                    .detect(
+                        amneziaContainer: environment?.containerName,
+                        amneziaBridge: environment?.bridge)
                 let known = Set(detection.networks.map(\.name))
                 let excluded = detection.networks
                     .filter {

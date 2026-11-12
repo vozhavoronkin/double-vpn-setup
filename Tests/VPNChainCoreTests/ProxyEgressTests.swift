@@ -130,6 +130,34 @@ struct ProxyEgressTests {
         #expect(selected.map(\.name) == ["3x-ui", "bridge"])
     }
 
+    /// Регрессия с реальной пары: контейнер AmneziaVPN подключён к своей сети И к
+    /// дефолтной `bridge`, а прокси живут в `bridge`. Исключаться должен только bridge
+    /// клиентской сети, иначе прокси в `bridge` не попадают в список.
+    @Test func defaultBridgeStaysAvailableWhenAmneziaContainerUsesTwoNetworks() async throws {
+        let id = "9f7e5c1a2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f"
+        let runner = FakeRunner([
+            ("docker network ls", ok("bridge\namnezia_net\n3x-ui\n")),
+            ("3x-ui", ok(networkInspectFixture("aaaabbbbccccdddd", "172.18.0.0/16"))),
+            ("amnezia_net", ok(networkInspectFixture(id, "172.26.0.0/16"))),
+            ("bridge", ok(networkInspectFixture("eeeeffff00001111", "172.17.0.0/16"))),
+        ])
+        let detector = ProxyNetworkDetector(runner: runner)
+        let detection = try await detector.detect(
+            amneziaContainer: "amnezia-awg2",
+            amneziaBridge: "br-" + String(id.prefix(12))
+        )
+
+        #expect(detection.amneziaNetworks == ["amnezia_net"])
+        #expect(detection.networks.map(\.name) == ["3x-ui", "amnezia_net", "bridge"])
+
+        let selected = ProxyEgressRules.selectedNetworks(
+            all: detection.networks,
+            settings: ProxyEgressSettings(enabled: true),
+            amneziaNetworks: detection.amneziaNetworks
+        )
+        #expect(selected.map(\.name) == ["3x-ui", "bridge"])
+    }
+
     @Test func exclusionRemovesNetworkFromSelection() {
         let networks = [
             ProxyNetwork(name: "3x-ui", subnet: "172.18.0.0/16", bridge: "br-aaaabbbbcccc"),
