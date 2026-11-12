@@ -74,6 +74,7 @@ openspec validate macos-vpn-chain-setup-app --strict
 
 - `main` защищена rulesets: прямой push запрещён, изменения — только через pull request (1 аппрув; владелец может мержить с bypass). Force push и удаление `main` заблокированы для всех.
 - Работа — в отдельной ветке, затем PR; после мержа ветку удалить.
+- OpenSpec-изменение архивируется **до мержа PR**, в той же ветке: `openspec archive <name>` переносит его в `openspec/changes/archive/YYYY-MM-DD-<name>/`. Так `main` получает код и архив одним PR; отдельный PR на архивацию не нужен.
 - Одна ветка — одна цель: фича и релизный коммит (версия, CHANGELOG) в один PR не смешиваются.
 
 ## Релиз

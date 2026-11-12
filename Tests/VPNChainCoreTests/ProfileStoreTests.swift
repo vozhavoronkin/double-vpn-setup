@@ -6,7 +6,9 @@ import Testing
 
 /// Тесты задачи 2.2: профили в UserDefaults, секреты — в Keychain.
 /// Секрет не должен появиться в JSON профилей ни в каком виде.
-struct ProfileStoreTests {
+/// Вложена в сериализованный `SharedSecretStateTests`: `SecretRedactor`
+/// и Keychain — глобальное состояние, общее с `LogSanitizationTests`.
+extension SharedSecretStateTests.ProfileStoreTests {
     private func makeStore() -> ProfileStore {
         let suiteName = "vpnchain-tests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -29,6 +31,7 @@ struct ProfileStoreTests {
             authKind: .password
         )
         store.upsert(profile)
+        defer { store.delete(id: profile.id) }  // не засоряем глобальный SecretRedactor и Keychain
         let secret = "s3cr3t-пароль-42"
         try store.setPassword(secret, profileID: profile.id)
 
@@ -99,6 +102,8 @@ struct ProfileStoreTests {
         let passwordProfile = ConnectionProfile(
             role: .entry, host: "h", user: "root", authKind: .password)
         store.upsert(passwordProfile)
+        // не засоряем глобальный SecretRedactor и Keychain
+        defer { store.delete(id: passwordProfile.id) }
         #expect(!store.isReady(passwordProfile))  // пароля ещё нет
         try store.setPassword("x", profileID: passwordProfile.id)
         #expect(store.isReady(passwordProfile))
