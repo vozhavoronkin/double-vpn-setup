@@ -365,12 +365,20 @@ public final class ProvisioningEngine: @unchecked Sendable {
         if action.apply.contains("vpn-chain-exit-rules.sh") {
             parts.append("bash -x /usr/local/bin/vpn-chain-exit-rules.sh 2>&1 | tail -40 || true")
         }
+        if action.apply.contains("vpn-chain-proxy-exit-rules.sh") {
+            parts.append(
+                "bash -x /usr/local/bin/vpn-chain-proxy-exit-rules.sh 2>&1 | tail -40 || true")
+        }
         if action.apply.contains("vpn-chain-rules.sh") {
             parts.append("bash -x /usr/local/bin/vpn-chain-rules.sh 2>&1 | tail -40 || true")
         }
+        if action.apply.contains("vpn-chain-proxy-rules.sh") {
+            parts.append(
+                "bash -x /usr/local/bin/vpn-chain-proxy-rules.sh 2>&1 | tail -40 || true")
+        }
         if action.apply.contains("vpn-chain") {
             parts.append(
-                "journalctl -u vpn-chain.service -u vpn-chain-exit.service --no-pager -n 25 2>/dev/null | tail -30"
+                "journalctl -u vpn-chain.service -u vpn-chain-exit.service -u vpn-chain-proxy.service -u vpn-chain-proxy-exit.service --no-pager -n 25 2>/dev/null | tail -30"
             )
             parts.append(
                 "systemctl status vpn-chain-exit.service --no-pager 2>/dev/null | head -12")
@@ -439,6 +447,98 @@ public final class ProvisioningEngine: @unchecked Sendable {
             try await apply(action, on: c1, role: .entry)
         }
         return "конфигурация С1 применена"
+    }
+
+    // MARK: Режим проксирования исходящего трафика (proxy-egress)
+
+    /// Применение режима «Прокси»: сначала сервер-выход (очистка следов прежней схемы
+    /// и состояние), затем сервер-вход (маркировка, SNAT, IPv6). При ошибке на входе
+    /// выполняется откат к выключенному состоянию. При ошибке на выходе состояние входа
+    /// не тронуто (маркировки ещё нет), поэтому достаточно попытки повторной очистки
+    /// выхода — она фиксируется в журнале, но не маскирует исходную ошибку.
+    @discardableResult
+    public func applyProxyEgress(
+        settings: ProxyEgressSettings,
+        allNetworks: [ProxyNetwork],
+        amneziaNetworks: Set<String>,
+        exitIP: String,
+        wanInterface: String,
+        clientPort: String?
+    ) async throws -> ProxyEgressApplied {
+        let networks = ProxyEgressRules.selectedNetworks(
+            all: allNetworks, settings: settings, amneziaNetworks: amneziaNetworks)
+        let enabled = settings.enabled
+        if enabled {
+            try ProxyEgressRules.validate(
+                networks: networks, exitIP: exitIP, wanInterface: wanInterface)
+        }
+
+        emit("proxy-exit", .running, nil)
+        do {
+            for action in ProxyEgressRules.exitActions(
+                enabled: enabled, networks: networks, wanInterface: wanInterface, exitIP: exitIP)
+            {
+                try await apply(action, on: c2, role: .exit)
+            }
+            emit(
+                "proxy-exit", .done,
+                enabled ? "сервер-выход чист (SNAT — на входе)" : "правила сняты")
+        } catch {
+            emit("proxy-exit", .failed, "\(error)")
+            // Повторная очистка выхода: вход не тронут, но состояние выхода могло
+            // остаться частично изменённым.
+            for action in ProxyEgressRules.exitActions(
+                enabled: false, networks: [], wanInterface: wanInterface, exitIP: "")
+            {
+                _ = try? await apply(action, on: c2, role: .exit)
+            }
+            throw error
+        }
+
+        emit("proxy-entry", .running, nil)
+        do {
+            for action in ProxyEgressRules.entryActions(
+                enabled: enabled, networks: networks, exitIP: exitIP, clientPort: clientPort)
+            {
+                try await apply(action, on: c1, role: .entry)
+            }
+            emit("proxy-entry", .done, enabled ? "маркировка применена" : "правила сняты")
+        } catch {
+            emit("proxy-entry", .failed, "\(error)")
+            await rollbackProxyEgress(wanInterface: wanInterface)
+            throw error
+        }
+        return ProxyEgressApplied(enabled: enabled, networks: networks)
+    }
+
+    /// Выключение режима: снятие правил на обоих серверах (порядок тот же — выход, затем вход).
+    @discardableResult
+    public func disableProxyEgress(wanInterface: String) async throws -> ProxyEgressApplied {
+        try await applyProxyEgress(
+            settings: ProxyEgressSettings(enabled: false),
+            allNetworks: [],
+            amneziaNetworks: [],
+            exitIP: "",
+            wanInterface: wanInterface,
+            clientPort: nil
+        )
+    }
+
+    /// Откат после ошибки на входе: снимаем и правила входа, и маршруты/NAT выхода.
+    /// Ошибки отката не маскируют исходную причину — они попадают в журнал.
+    private func rollbackProxyEgress(wanInterface: String) async {
+        emit("proxy-disable", .running, "откат к выключенному режиму")
+        for action in ProxyEgressRules.exitActions(
+            enabled: false, networks: [], wanInterface: wanInterface, exitIP: "")
+        {
+            _ = try? await apply(action, on: c2, role: .exit)
+        }
+        for action in ProxyEgressRules.entryActions(
+            enabled: false, networks: [], exitIP: "", clientPort: nil)
+        {
+            _ = try? await apply(action, on: c1, role: .entry)
+        }
+        emit("proxy-disable", .done, "правила режима сняты")
     }
 
     /// Verify: handshake С1↔С2 в пределах попыток (ТЗ раздел 10, пункт 2).

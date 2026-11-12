@@ -9,6 +9,8 @@ public enum ConfigureC1 {
     public static let blackholeMetric = 42760
     /// Метка «клиентский трафик → в relay-туннель» (fwmark).
     public static let mark = "0x51"
+    /// Имя relay-интерфейса (используется и в правилах режима проксирования).
+    public static let relayInterface = "awg-relay"
 
     // MARK: Скрипт правил С1 (ТЗ 6.2 шаг 8 + исправления из design.md D7)
 

@@ -24,10 +24,17 @@ public enum UninstallPlan {
         "vpn-chain-exit.service",
         "vpn-chain-rules.sh",
         "vpn-chain-exit-rules.sh",
+        "vpn-chain-proxy.service",
+        "vpn-chain-proxy-rules.sh",
+        "vpn-chain-proxy-exit.service",
+        "vpn-chain-proxy-exit-rules.sh",
         "/etc/amnezia/amneziawg/awg-relay.conf",
         "/etc/sysctl.d/99-vpn-chain.conf",
         "/etc/amnezia/chain",
+        "proxies.json",
         "VPNCHAIN",
+        "VPNCHAIN_HOST_OUT",
+        "VPNCHAIN_DOCKER_OUT",
         "table 51821",
         "--dport 51828",
     ]
@@ -43,6 +50,30 @@ public enum UninstallPlan {
                     awg-quick down awg-relay 2>/dev/null || true
                     systemctl disable --now awg-quick@awg-relay 2>/dev/null || true
                     systemctl disable --now vpn-chain.service 2>/dev/null || true
+                    """
+            ),
+            UninstallCommand(
+                id: "entry-proxy",
+                title: "Снятие режима проксирования (цепочки и IPv6-блокировка)",
+                command: """
+                    systemctl disable --now vpn-chain-proxy.service 2>/dev/null || true
+                    while iptables -t mangle -D OUTPUT -j VPNCHAIN_HOST_OUT 2>/dev/null; do :; done
+                    while iptables -t mangle -D PREROUTING -j VPNCHAIN_DOCKER_OUT 2>/dev/null; do :; done
+                    iptables -t mangle -F VPNCHAIN_HOST_OUT 2>/dev/null || true
+                    iptables -t mangle -X VPNCHAIN_HOST_OUT 2>/dev/null || true
+                    iptables -t mangle -F VPNCHAIN_DOCKER_OUT 2>/dev/null || true
+                    iptables -t mangle -X VPNCHAIN_DOCKER_OUT 2>/dev/null || true
+                    if [ -f '/etc/amnezia/chain/proxies.json' ]; then
+                      for s in $(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' '/etc/amnezia/chain/proxies.json'); do
+                        while iptables -t nat -D POSTROUTING -s "$s" -o awg-relay -j MASQUERADE 2>/dev/null; do :; done
+                      done
+                    fi
+                    while ip6tables -D OUTPUT -j VPNCHAIN_PROXY6_HOST 2>/dev/null; do :; done
+                    while ip6tables -t mangle -D PREROUTING -j VPNCHAIN_PROXY6_DOCKER 2>/dev/null; do :; done
+                    ip6tables -F VPNCHAIN_PROXY6_HOST 2>/dev/null || true
+                    ip6tables -X VPNCHAIN_PROXY6_HOST 2>/dev/null || true
+                    ip6tables -t mangle -F VPNCHAIN_PROXY6_DOCKER 2>/dev/null || true
+                    ip6tables -t mangle -X VPNCHAIN_PROXY6_DOCKER 2>/dev/null || true
                     """
             ),
             UninstallCommand(
@@ -75,6 +106,7 @@ public enum UninstallPlan {
                 command: """
                     rm -f '/etc/amnezia/amneziawg/awg-relay.conf' '/etc/amnezia/amneziawg/awg-relay.conf.bak.'*
                     rm -f '/usr/local/bin/vpn-chain-rules.sh' '/etc/systemd/system/vpn-chain.service'
+                    rm -f '/usr/local/bin/vpn-chain-proxy-rules.sh' '/etc/systemd/system/vpn-chain-proxy.service'
                     rm -f '/etc/sysctl.d/99-vpn-chain.conf' '/etc/sysctl.d/99-vpn-chain.conf.bak.'*
                     systemctl daemon-reload 2>/dev/null || true
                     """
@@ -97,12 +129,13 @@ public enum UninstallPlan {
             subnets.append("'\(clientSubnet)'")
         }
         subnets.append("'10.99.0.0/24'")
-        // Удаление по номеру правила: MASQUERADE создаётся с `-o <WAN>`, и точное
-        // совпадение спецификации при удалении без знания WAN невозможно.
+        // Точное совпадение токена подсети в `iptables -S`: подстрочный поиск удалил бы
+        // чужое правило (10.0.0.0/16 ⊂ 110.0.0.0/16). Правила Docker (`! -o …`)
+        // пропускаются: удаляются только MASQUERADE режима с явным `-o <WAN>`.
         let natRemoval = """
             for s in \(subnets.joined(separator: " ")); do
-              while n=$(iptables -t nat -L POSTROUTING --line-numbers -n | awk -v s="$s" '/MASQUERADE/ && index($0, s) {print $1; exit}'); [ -n "$n" ]; do
-                iptables -t nat -D POSTROUTING "$n" 2>/dev/null || break
+              iptables -t nat -S POSTROUTING | awk -v s="$s" 'index($0, " -s " s " ") && index($0, " -o ") && !index($0, "! -o ") { sub(/^-A POSTROUTING /, ""); print }' | while read -r rule; do
+                iptables -t nat -D POSTROUTING $rule 2>/dev/null || true
               done
             done
             """
@@ -122,6 +155,23 @@ public enum UninstallPlan {
                 command: natRemoval
             ),
             UninstallCommand(
+                id: "exit-proxy",
+                title: "Снятие маршрутов/NAT режима проксирования",
+                command: """
+                    systemctl disable --now vpn-chain-proxy-exit.service 2>/dev/null || true
+                    if [ -f '/etc/amnezia/chain/proxies.json' ]; then
+                      for s in $(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' '/etc/amnezia/chain/proxies.json'); do
+                        ip route del "$s" dev awg-relay 2>/dev/null || true
+                        # Удаляем только свои правила: точное совпадение токена подсети
+                        # (не подстрока) и наличие -o без «! -o» (правила Docker не трогаем).
+                        iptables -t nat -S POSTROUTING | awk -v s="$s" 'index($0, " -s " s " ") && index($0, " -o ") && !index($0, "! -o ") { sub(/^-A POSTROUTING /, ""); print }' | while read -r rule; do
+                          iptables -t nat -D POSTROUTING $rule 2>/dev/null || true
+                        done
+                      done
+                    fi
+                    """
+            ),
+            UninstallCommand(
                 id: "exit-forward",
                 title: "Удаление FORWARD/INPUT/MSS-правил",
                 command: """
@@ -137,6 +187,7 @@ public enum UninstallPlan {
                 command: """
                     rm -f '/etc/amnezia/amneziawg/awg-relay.conf' '/etc/amnezia/amneziawg/awg-relay.conf.bak.'*
                     rm -f '/usr/local/bin/vpn-chain-exit-rules.sh' '/etc/systemd/system/vpn-chain-exit.service'
+                    rm -f '/usr/local/bin/vpn-chain-proxy-exit-rules.sh' '/etc/systemd/system/vpn-chain-proxy-exit.service'
                     rm -f '/etc/sysctl.d/99-vpn-chain.conf' '/etc/sysctl.d/99-vpn-chain.conf.bak.'*
                     systemctl daemon-reload 2>/dev/null || true
                     """

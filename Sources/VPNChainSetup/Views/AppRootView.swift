@@ -15,6 +15,7 @@ enum AppSections {
         AppSection(id: "status", title: "Статус", systemImage: "gauge.with.dots.needle.67percent"),
         AppSection(id: "diagnostics", title: "Диагностика", systemImage: "stethoscope"),
         AppSection(id: "client", title: "Клиент", systemImage: "laptopcomputer"),
+        AppSection(id: "proxies", title: "Прокси", systemImage: "arrow.triangle.branch"),
     ]
 
     static func section(id: String) -> AppSection {
@@ -71,6 +72,7 @@ struct AppRootView: View {
         case "status": StatusView()
         case "diagnostics": DiagnosticsView()
         case "client": ClientView()
+        case "proxies": ProxiesView()
         default: Text("Неизвестный раздел")
         }
     }

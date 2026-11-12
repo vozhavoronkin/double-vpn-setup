@@ -87,8 +87,8 @@ final class StatusViewModel: ObservableObject {
         }
         refreshing = true
         errorText = nil
-        let checker = ConnectionChecker(store: store) { fingerprint in
-            await ConnectionsViewModel.confirmFingerprint(host: "", fingerprint: fingerprint)
+        let checker = ConnectionChecker(store: store) { host, fingerprint in
+            await ConnectionsViewModel.confirmFingerprint(host: host, fingerprint: fingerprint)
         }
 
         Task { [weak self] in
@@ -113,11 +113,17 @@ final class StatusViewModel: ObservableObject {
                 }
                 self?.environment = environment
 
+                // Режим «Прокси»: отсутствие файла состояния = выключено (proxy-проверки скрыты).
+                let proxyStateResult = try? await c1.run(
+                    ProxiesState.readCommand, timeout: 30, onOutput: nil)
+                let proxyState = proxyStateResult.flatMap { ProxiesState.decode($0.stdout) }
+
                 let collector = StatusCollector(environment: environment)
                 let snapshot = await collector.snapshot(c1: c1, c2: c2)
                 self?.snapshot = snapshot
 
-                let checks = ChecksEngine.automatedChecks(environment: environment)
+                let checks = ChecksEngine.automatedChecks(
+                    environment: environment, proxyState: proxyState)
                 self?.checkResults = await ChecksEngine.runAll(checks, entry: c1, exit: c2)
                 self?.lastUpdatedAt = Date()
             } catch {

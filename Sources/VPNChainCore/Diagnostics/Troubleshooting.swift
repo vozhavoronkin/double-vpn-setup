@@ -9,6 +9,10 @@ public enum Symptom: String, CaseIterable, Sendable {
     case sshLost
     case slowSpeed
     case ipv6Leak
+    /// Режим «Прокси» включён, но трафик прокси не выходит через сервер-выход.
+    case proxyNotEgressing
+    /// После включения режима «Прокси» пропал доступ.
+    case accessLostAfterProxy
 }
 
 /// Гайд по симптому: автоматические проверки + советы (design D8 — данные, не код).
@@ -29,13 +33,18 @@ public enum Troubleshooting {
     public static func guide(
         for symptom: Symptom,
         environment: ChainState.Environment?,
-        s2Address: String?
+        s2Address: String?,
+        proxyState: ProxiesState? = nil
     ) -> SymptomGuide {
         switch symptom {
         case .noHandshake:
             return noHandshakeGuide(s2Address: s2Address, symptom: symptom)
         case .handshakeButNoInternet:
             return handshakeButNoInternetGuide(environment: environment, symptom: symptom)
+        case .proxyNotEgressing:
+            return proxyNotEgressingGuide(proxyState: proxyState, symptom: symptom)
+        case .accessLostAfterProxy:
+            return accessLostAfterProxyGuide(symptom: symptom)
         case .brokenAfterAppUserAdded:
             return SymptomGuide(
                 symptom: symptom,
@@ -125,6 +134,75 @@ public enum Troubleshooting {
     }
 
     // MARK: Частные гайды
+
+    private static func proxyNotEgressingGuide(proxyState: ProxiesState?, symptom: Symptom)
+        -> SymptomGuide
+    {
+        var checks = ChecksEngine.proxyChecks(state: proxyState)
+        if checks.isEmpty {
+            checks = [
+                ServerCheck(
+                    id: "proxy-state",
+                    title: "Состояние режима проксирования на сервере-входе",
+                    command: ProxiesState.readCommand,
+                    kind: .outputContains("\"enabled\" : true"),
+                    failureHint:
+                        "Режим не применён или файл состояния отсутствует — включите режим в разделе «Прокси»",
+                    server: .entry
+                )
+            ]
+        }
+        return SymptomGuide(
+            symptom: symptom,
+            title: "Прокси не выходит через сервер-выход",
+            explanation:
+                "Маркировка не применилась, сеть исключена, Docker-сеть пересоздана или пропал SNAT в туннель.",
+            checks: checks,
+            advice: [
+                "1. Убедитесь, что сеть контейнера включена в разделе «Прокси» (сеть AmneziaVPN исключена всегда).",
+                "2. Обновите список сетей и примените правила заново: при пересоздании сети меняется bridge.",
+                "3. Проверьте фактический выход: контейнеры должны показывать IP сервера-выхода (в контейнерах без curl/wget проверяйте вручную через сам прокси).",
+                "4. Если режим включён без выбранных сетей, через сервер-выход не идёт ничего — отметьте сети галочками.",
+                "5. Контейнерный трафик должен проходить SNAT в туннель (MASQUERADE -o awg-relay на сервере-входе): без него туннель отбрасывает чужие адреса источника.",
+            ],
+            suggestsReapply: false
+        )
+    }
+
+    private static func accessLostAfterProxyGuide(symptom: Symptom) -> SymptomGuide {
+        SymptomGuide(
+            symptom: symptom,
+            title: "После включения режима пропал доступ",
+            explanation:
+                "Режим заворачивает трафик контейнеров включённых Docker-сетей: при недоступном сервере-выходе маркированный трафик умирает на blackhole (kill-switch). SSH и хостовой трафик сервера-входа не затрагиваются.",
+            checks: [
+                ServerCheck(
+                    id: "handshake-proxy",
+                    title: "Handshake relay-туннеля на сервере-входе",
+                    command: StatusParsers.awgShowCommand,
+                    kind: .handshakeWithin(seconds: 300),
+                    failureHint:
+                        "Туннель до сервера-выхода не поднят — трафик контейнеров уходит в blackhole; выключите режим и проверьте сервер-выход",
+                    server: .entry
+                ),
+                ServerCheck(
+                    id: "proxy-docker-chain",
+                    title: "Цепочка режима на месте",
+                    command: "iptables -t mangle -S \(ProxyEgressRules.dockerChain) 2>/dev/null",
+                    kind: .outputContains(ProxyEgressRules.dockerChain),
+                    failureHint: "Правила режима потеряны — перезапустите vpn-chain-proxy.service",
+                    server: .entry
+                ),
+            ],
+            advice: [
+                "1. SSH и хостовые сервисы сервера-входа остаются доступными всегда: их трафик режим не маркирует.",
+                "2. Выключите режим в разделе «Прокси» и примените — правила, SNAT и маршруты снимутся.",
+                "3. Проверьте сервер-выход: systemctl status awg-quick@awg-relay и handshake в awg show awg-relay.",
+                "4. Если контейнеры всё же недоступны — через консоль провайдера снимите цепочки: iptables -t mangle -D PREROUTING -j VPNCHAIN_DOCKER_OUT; ip6tables -t mangle -D PREROUTING -j VPNCHAIN_PROXY6_DOCKER.",
+            ],
+            suggestsReapply: false
+        )
+    }
 
     private static func noHandshakeGuide(s2Address: String?, symptom: Symptom) -> SymptomGuide {
         var checks: [ServerCheck] = [

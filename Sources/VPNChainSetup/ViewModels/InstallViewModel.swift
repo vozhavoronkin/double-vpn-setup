@@ -84,8 +84,8 @@ final class InstallViewModel: ObservableObject {
             StepRow(id: stepID, title: Self.titles[stepID] ?? stepID, state: .pending, detail: nil)
         }
 
-        let checker = ConnectionChecker(store: store) { [weak self] fingerprint in
-            await Self.confirmFingerprint(host: "", fingerprint: fingerprint)
+        let checker = ConnectionChecker(store: store) { [weak self] host, fingerprint in
+            await Self.confirmFingerprint(host: host, fingerprint: fingerprint)
         }
 
         Task { [weak self] in

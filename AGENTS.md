@@ -12,7 +12,7 @@
 ## Команды
 
 ```bash
-swift test                                  # все unit-тесты (146 шт., ~1 c)
+swift test                                  # все unit-тесты (178 шт., ~1 c)
 swift test --filter NameOfTest              # один тест/сьют
 swift build                                 # сборка core-модуля
 xcodegen generate                           # пересоздать VPNChainSetup.xcodeproj из project.yml
@@ -46,7 +46,7 @@ openspec validate macos-vpn-chain-setup-app --strict
     профили в UserDefaults, секреты в Keychain.
   - `Logging/` — санитизация логов (секреты не попадают в вывод).
 - `Sources/VPNChainSetup/` — MVVM: `ViewModels/` + `Views/` (экраны подключений, установки,
-  статуса, диагностики, клиента), `Views/DesignSystem.swift` — карточки, статус-пилюли,
+  статуса, диагностики, клиента, прокси), `Views/DesignSystem.swift` — карточки, статус-пилюли,
   строки метрик, баннеры, empty state и токены отступов, `Services/AppServices.swift` — сборка
   зависимостей и `AppCommandRouter` для меню-команд (⌘R / ⌘↩ / ⌘D).
 - `Sources/VPNChainSetup/Resources/Assets.xcassets` — иконка приложения (`AppIcon`), собирается
