@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия Swift
+        run: swift --version
+
+      - name: Unit-тесты
+        run: swift test
+
+      - name: Сборка приложения
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+          xcodebuild -project VPNChainSetup.xcodeproj -scheme VPNChainSetup \
+            -destination 'platform=macOS' build
