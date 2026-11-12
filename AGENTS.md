@@ -70,6 +70,18 @@ openspec validate macos-vpn-chain-setup-app --strict
 
 - `main` защищена rulesets: прямой push запрещён, изменения — только через pull request (1 аппрув; владелец может мержить с bypass). Force push и удаление `main` заблокированы для всех.
 - Работа — в отдельной ветке, затем PR; после мержа ветку удалить.
+- Одна ветка — одна цель: фича и релизный коммит (версия, CHANGELOG) в один PR не смешиваются.
+
+## Релиз
+
+Релиз выходит тегом `vX.Y.Z` на `main`; пуш тега запускает `.github/workflows/release.yml` (universal-сборка, zip, `SHA256SUMS.txt`).
+
+1. Ветка `chore/release-X.Y.Z` от актуального `main`.
+2. В ней: `MARKETING_VERSION` и `CURRENT_PROJECT_VERSION` в `project.yml` (билд-номер растёт на 1), раздел `## [X.Y.Z] — дата` в `CHANGELOG.md`, затем `xcodegen generate` и `xcodebuild … build`.
+3. PR в `main`, мерж после аппрува (или bypass владельца).
+4. После мержа — аннотированный тег на коммит `main`: `git tag -a vX.Y.Z origin/main -m "X.Y.Z — …"`, затем `git push origin vX.Y.Z`. Тег ставится только на смерженный коммит в `main`.
+5. Ветка `release/X.Y.Z` от этого тега — для истории релиза. Её не мержить.
+6. Проверить запуск workflow `Release` и ассеты релиза.
 
 ## Keep this file current
 
