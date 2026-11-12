@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Фейковый транспорт: скриптованная очередь ответов с проверкой подстрок команд.
@@ -41,7 +42,11 @@ final class FakeRunner: RemoteRunner, @unchecked Sendable {
         if let index = queue.firstIndex(where: { command.contains($0.contains) }) {
             let item = queue.remove(at: index)
             if !item.contains.isEmpty, !command.contains(item.contains) {
-                return .success(SSHExecResult(exitCode: 2, stdout: "", stderr: "fake: ожидалась команда с '\(item.contains)', получено: \(command)"))
+                return .success(
+                    SSHExecResult(
+                        exitCode: 2, stdout: "",
+                        stderr: "fake: ожидалась команда с '\(item.contains)', получено: \(command)"
+                    ))
             }
             return item.result
         }
@@ -49,7 +54,8 @@ final class FakeRunner: RemoteRunner, @unchecked Sendable {
     }
 }
 
-func ok(_ stdout: String = "", _ stderr: String = "", code: Int = 0) -> Result<SSHExecResult, Error> {
+func ok(_ stdout: String = "", _ stderr: String = "", code: Int = 0) -> Result<SSHExecResult, Error>
+{
     .success(SSHExecResult(exitCode: code, stdout: stdout, stderr: stderr))
 }
 /// Фиксчуны вывода docker (как на реальном сервере).
@@ -57,19 +63,19 @@ enum DockerFixtures {
     static let containerNames = "amnezia-awg\npostgres\nredis\n"
 
     static let containerNetworks = """
-    {"amnezia_net":{"IPAMConfig":null,"Links":null,"Aliases":["a1b2"],"NetworkID":"9f7e5c1a2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f","EndpointID":"e1","Gateway":"172.26.0.1","IPAddress":"172.26.0.2","IPPrefixLen":16}}
-    """
+        {"amnezia_net":{"IPAMConfig":null,"Links":null,"Aliases":["a1b2"],"NetworkID":"9f7e5c1a2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f","EndpointID":"e1","Gateway":"172.26.0.1","IPAddress":"172.26.0.2","IPPrefixLen":16}}
+        """
 
     static let networkInspect = """
-    {"Name":"amnezia_net","Id":"9f7e5c1a2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f","IPAM":{"Driver":"default","Config":[{"Subnet":"172.26.0.0/16","Gateway":"172.26.0.1"}]}}
-    """
+        {"Name":"amnezia_net","Id":"9f7e5c1a2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f","IPAM":{"Driver":"default","Config":[{"Subnet":"172.26.0.0/16","Gateway":"172.26.0.1"}]}}
+        """
 
     static let wg0Conf = """
-    [Interface]
-    Address = 10.8.1.5/24
-    ListenPort = 51820
-    PrivateKey = EKZ1WruHYkpXuSvEu6DMHIMwULIRLSabMH0hYQkvyWo=
-    """
+        [Interface]
+        Address = 10.8.1.5/24
+        ListenPort = 51820
+        PrivateKey = EKZ1WruHYkpXuSvEu6DMHIMwULIRLSabMH0hYQkvyWo=
+        """
 }
 
 /// Тесты задачи 4.1: детект окружения С1.
@@ -84,7 +90,7 @@ struct EnvironmentDetectionTests {
         let result = try await EnvironmentDetector(runner: runner).detect()
 
         #expect(result.containerName == "amnezia-awg")
-        #expect(result.environment.bridge == "br-9f7e5c1a2b3d") // br- + 12 символов ID
+        #expect(result.environment.bridge == "br-9f7e5c1a2b3d")  // br- + 12 символов ID
         #expect(result.environment.dockerSubnet == "172.26.0.0/16")
         #expect(result.environment.containerIP == "172.26.0.2")
         #expect(result.environment.clientSubnet == "10.8.1.0/24")
@@ -92,7 +98,7 @@ struct EnvironmentDetectionTests {
 
     @Test func containerMissingStopsDetection() async {
         let runner = FakeRunner([
-            ("docker ps", ok("postgres\nredis\n")),
+            ("docker ps", ok("postgres\nredis\n"))
         ])
         do {
             _ = try await EnvironmentDetector(runner: runner).detect()
@@ -106,7 +112,7 @@ struct EnvironmentDetectionTests {
 
     @Test func dockerMissingStopsDetection() async {
         let runner = FakeRunner([
-            ("docker ps", ok("", "/bin/sh: 1: docker: not found", code: 127)),
+            ("docker ps", ok("", "/bin/sh: 1: docker: not found", code: 127))
         ])
         do {
             _ = try await EnvironmentDetector(runner: runner).detect()
@@ -141,10 +147,12 @@ struct EnvironmentDetectionTests {
         // Round-trip: CLIENT_PORT разбирается из env, старый env без него — валиден.
         let parsed = try! ChainStateParser.parseEnvironment(content)
         #expect(parsed.clientPort == "44949")
-        let legacy = try! ChainStateParser.parseEnvironment("BRIDGE=b\nDOCKER_SUBNET=s\nCONTAINER_IP=i")
+        let legacy = try! ChainStateParser.parseEnvironment(
+            "BRIDGE=b\nDOCKER_SUBNET=s\nCONTAINER_IP=i")
         #expect(legacy.clientPort == nil)
 
-        let minimal = ChainState.Environment(bridge: "b", dockerSubnet: "s", containerIP: "i").fileContent
+        let minimal = ChainState.Environment(bridge: "b", dockerSubnet: "s", containerIP: "i")
+            .fileContent
         #expect(!minimal.contains("CLIENT_SUBNET"))
         #expect(!minimal.contains("CLIENT_PORT"))
         #expect(!minimal.contains("COMMIT"))
@@ -154,12 +162,12 @@ struct EnvironmentDetectionTests {
     /// а не `wg0.conf` (из-за этого не определялись подсеть и порт клиентов).
     @Test func detectsClientPortAndConfPaths() {
         let conf = """
-        ==FILE /opt/amnezia/awg/awg0.conf==
-        [Interface]
-        Address = 10.8.1.0/24
-        ListenPort = 44949
-        PrivateKey = SECRET
-        """
+            ==FILE /opt/amnezia/awg/awg0.conf==
+            [Interface]
+            Address = 10.8.1.0/24
+            ListenPort = 44949
+            PrivateKey = SECRET
+            """
         #expect(EnvironmentDetector.parseClientSubnet(conf) == "10.8.1.0/24")
         #expect(EnvironmentDetector.parseClientPort(conf) == "44949")
         #expect(EnvironmentDetector.parseClientPort("[Interface]\nAddress = 10.8.1.0/24\n") == nil)
@@ -173,8 +181,13 @@ struct EnvironmentDetectionTests {
     // MARK: Чистые парсеры
 
     @Test func containerSelectionPrefersAmneziaAwg() {
-        #expect(EnvironmentDetector.selectAmneziaContainer(from: ["postgres", "amnezia-awg", "awg-helper"]) == "amnezia-awg")
-        #expect(EnvironmentDetector.selectAmneziaContainer(from: ["postgres", "awg-helper"]) == "awg-helper")
+        #expect(
+            EnvironmentDetector.selectAmneziaContainer(from: [
+                "postgres", "amnezia-awg", "awg-helper",
+            ]) == "amnezia-awg")
+        #expect(
+            EnvironmentDetector.selectAmneziaContainer(from: ["postgres", "awg-helper"])
+                == "awg-helper")
         #expect(EnvironmentDetector.selectAmneziaContainer(from: ["postgres"]) == nil)
     }
 
@@ -193,25 +206,32 @@ struct EnvironmentDetectionTests {
     }
 
     @Test func parsesMultiNetworkContainerPrefersCustom() {
-        let json = #"{"bridge":{"IPAddress":"172.17.0.2"},"amnezia-dns-net":{"IPAddress":"172.29.172.2"}}"#
+        let json =
+            #"{"bridge":{"IPAddress":"172.17.0.2"},"amnezia-dns-net":{"IPAddress":"172.29.172.2"}}"#
         let parsed = EnvironmentDetector.parseContainerNetworks(json)
         #expect(parsed.networkName == "amnezia-dns-net")
         #expect(parsed.containerIP == "172.29.172.2")
     }
 
     @Test func hostInterfaceNameForBridgeAndCustom() {
-        #expect(EnvironmentDetector.hostInterfaceName(networkName: "bridge", networkID: "c8cb5493f698") == "docker0")
         #expect(
-            EnvironmentDetector.hostInterfaceName(networkName: "amnezia_net", networkID: "9f7e5c1a2b3d4e5f")
+            EnvironmentDetector.hostInterfaceName(networkName: "bridge", networkID: "c8cb5493f698")
+                == "docker0")
+        #expect(
+            EnvironmentDetector.hostInterfaceName(
+                networkName: "amnezia_net", networkID: "9f7e5c1a2b3d4e5f")
                 == "br-9f7e5c1a2b3d"
         )
     }
 
     @Test func routeGetCommandAndDevParsing() {
-        #expect(EnvironmentDetector.routeGetCommand(containerIP: "172.29.172.2") == "ip route get 172.29.172.2")
+        #expect(
+            EnvironmentDetector.routeGetCommand(containerIP: "172.29.172.2")
+                == "ip route get 172.29.172.2")
         // Новая топология AmneziaVPN: AWG-интерфейс amn0 живёт на хосте.
         #expect(
-            EnvironmentDetector.parseRouteDev("172.29.172.2 dev amn0 src 172.29.172.1 uid 0\n    cache")
+            EnvironmentDetector.parseRouteDev(
+                "172.29.172.2 dev amn0 src 172.29.172.1 uid 0\n    cache")
                 == "amn0"
         )
         // Старая топология: трафик до контейнера идёт через docker-бридж.
@@ -220,25 +240,33 @@ struct EnvironmentDetectionTests {
                 == "br-9f7e5c1a2b3d"
         )
         // Мусорный вывод — nil (движок останется на вычисленном имени бриджа).
-        #expect(EnvironmentDetector.parseRouteDev("RTNETLINK answers: Network is unreachable") == nil)
+        #expect(
+            EnvironmentDetector.parseRouteDev("RTNETLINK answers: Network is unreachable") == nil)
     }
 
     @Test func ingressInterfacePrefersAmnInterface() {
-        let interfaces = EnvironmentDetector.parseInterfaceNames("""
-        1: lo    inet 127.0.0.1/8 scope host lo
-        2: eth0    inet 203.0.113.10/24 brd 203.0.113.255 scope global eth0
-        12: amn0    inet 172.29.172.1/24 brd 172.29.172.255 scope global amn0
-        15: br-9f7e5c1a2b3d: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500
-        """)
+        let interfaces = EnvironmentDetector.parseInterfaceNames(
+            """
+            1: lo    inet 127.0.0.1/8 scope host lo
+            2: eth0    inet 203.0.113.10/24 brd 203.0.113.255 scope global eth0
+            12: amn0    inet 172.29.172.1/24 brd 172.29.172.255 scope global amn0
+            15: br-9f7e5c1a2b3d: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500
+            """)
         #expect(interfaces == ["lo", "eth0", "amn0", "br-9f7e5c1a2b3d"])
         // Новая топология: amn0 приоритетнее ответа маршрута (тот мог указать на br-…).
-        #expect(EnvironmentDetector.ingressInterfaceName(routeDev: "br-9f7e5c1a2b3d", interfaceNames: interfaces) == "amn0")
+        #expect(
+            EnvironmentDetector.ingressInterfaceName(
+                routeDev: "br-9f7e5c1a2b3d", interfaceNames: interfaces) == "amn0")
         // Старая топология: amn0 нет → интерфейс из ip route get.
-        #expect(EnvironmentDetector.ingressInterfaceName(routeDev: "br-9f7e5c1a2b3d", interfaceNames: ["lo", "eth0"]) == "br-9f7e5c1a2b3d")
+        #expect(
+            EnvironmentDetector.ingressInterfaceName(
+                routeDev: "br-9f7e5c1a2b3d", interfaceNames: ["lo", "eth0"]) == "br-9f7e5c1a2b3d")
         // Ничего не определилось → nil (движок возьмёт имя бриджа из ID сети).
         #expect(EnvironmentDetector.ingressInterfaceName(routeDev: nil, interfaceNames: []) == nil)
         // Наш relay-интерфейс не может быть интерфейсом входа.
-        #expect(EnvironmentDetector.ingressInterfaceName(routeDev: "awg-relay", interfaceNames: []) == nil)
+        #expect(
+            EnvironmentDetector.ingressInterfaceName(routeDev: "awg-relay", interfaceNames: [])
+                == nil)
     }
 
     @Test func bridgeMigrationRequiresAndCommands() {
@@ -246,8 +274,10 @@ struct EnvironmentDetectionTests {
         #expect(!EnvironmentDetector.requiresBridgeMigration(networkName: "amnezia_net"))
         #expect(!EnvironmentDetector.requiresBridgeMigration(networkName: nil))
 
-        let command = EnvironmentDetector.migrationCommand(container: "amnezia-awg2", networkName: "amnezia-relay-net", subnet: "172.29.172.0/24")
-        #expect(command.contains("docker network create --subnet='172.29.172.0/24' amnezia-relay-net"))
+        let command = EnvironmentDetector.migrationCommand(
+            container: "amnezia-awg2", networkName: "amnezia-relay-net", subnet: "172.29.172.0/24")
+        #expect(
+            command.contains("docker network create --subnet='172.29.172.0/24' amnezia-relay-net"))
         #expect(command.contains("docker network connect amnezia-relay-net amnezia-awg2"))
         #expect(command.contains("docker network disconnect bridge amnezia-awg2"))
     }
@@ -255,19 +285,25 @@ struct EnvironmentDetectionTests {
     @Test func pickFreeSubnetSkipsUsedOnBothServers() {
         // 172.29.172.0/24 занята на С1 → следующий кандидат.
         let c1Used = "default via 1.2.3.4 dev eth0\n172.29.172.0/24 dev amn0 proto kernel"
-        #expect(EnvironmentDetector.pickFreeSubnet(routesC1: c1Used, routesC2: "") == "172.28.0.0/16")
+        #expect(
+            EnvironmentDetector.pickFreeSubnet(routesC1: c1Used, routesC2: "") == "172.28.0.0/16")
         // 172.28.0.0/16 занята на С2 → пропускаем тоже.
-        #expect(EnvironmentDetector.pickFreeSubnet(routesC1: c1Used, routesC2: "172.28.0.0/16 dev br-x") == "172.26.0.0/16")
+        #expect(
+            EnvironmentDetector.pickFreeSubnet(routesC1: c1Used, routesC2: "172.28.0.0/16 dev br-x")
+                == "172.26.0.0/16")
         // Всё свободно — первый кандидат.
         #expect(EnvironmentDetector.pickFreeSubnet(routesC1: "", routesC2: "") == "172.29.172.0/24")
         // Все кандидаты заняты.
-        let everything = ["172.29.172.0/24", "172.28.0.0/16", "172.26.0.0/16", "10.50.0.0/16"].joined(separator: "\n")
-        #expect(EnvironmentDetector.pickFreeSubnet(routesC1: everything, routesC2: everything) == nil)
+        let everything = ["172.29.172.0/24", "172.28.0.0/16", "172.26.0.0/16", "10.50.0.0/16"]
+            .joined(separator: "\n")
+        #expect(
+            EnvironmentDetector.pickFreeSubnet(routesC1: everything, routesC2: everything) == nil)
     }
 
     @Test func clientSubnetParsedAndMasked() {
         #expect(EnvironmentDetector.parseClientSubnet(DockerFixtures.wg0Conf) == "10.8.1.0/24")
-        #expect(EnvironmentDetector.parseClientSubnet("Address = 172.16.3.77/16") == "172.16.0.0/16")
+        #expect(
+            EnvironmentDetector.parseClientSubnet("Address = 172.16.3.77/16") == "172.16.0.0/16")
         #expect(EnvironmentDetector.parseClientSubnet("Address = 10.0.0.1/32") == "10.0.0.1/32")
         #expect(EnvironmentDetector.parseClientSubnet("ListenPort = 51820") == nil)
     }
@@ -284,9 +320,9 @@ struct EnvironmentDetectionTests {
 struct PlatformCheckTests {
     @Test func parsesUbuntu2204X86() throws {
         let osRelease = """
-        NAME="Ubuntu"
-        VERSION_ID="22.04"
-        """
+            NAME="Ubuntu"
+            VERSION_ID="22.04"
+            """
         let platform = try PlatformParser.parsePlatform(osRelease: osRelease, uname: "x86_64")
         #expect(platform == ServerPlatform(os: .ubuntu, majorVersion: 22, arch: .x86_64))
         try PlatformParser.ensureSupported(platform)
@@ -294,19 +330,22 @@ struct PlatformCheckTests {
     }
 
     @Test func parsesDebian12Aarch64() throws {
-        let platform = try PlatformParser.parsePlatform(osRelease: "NAME=\"Debian GNU/Linux\"\nVERSION_ID=\"12\"", uname: "aarch64")
+        let platform = try PlatformParser.parsePlatform(
+            osRelease: "NAME=\"Debian GNU/Linux\"\nVERSION_ID=\"12\"", uname: "aarch64")
         try PlatformParser.ensureSupported(platform)
         #expect(platform.os == .debian)
     }
 
     @Test func unknownOSRejected() {
         #expect(throws: PlatformParser.PlatformError.unknownOS("CentOS Linux")) {
-            try PlatformParser.parsePlatform(osRelease: "NAME=\"CentOS Linux\"\nVERSION_ID=\"7\"", uname: "x86_64")
+            try PlatformParser.parsePlatform(
+                osRelease: "NAME=\"CentOS Linux\"\nVERSION_ID=\"7\"", uname: "x86_64")
         }
     }
 
     @Test func unsupportedVersionRejected() {
-        let platform = try? PlatformParser.parsePlatform(osRelease: "NAME=\"Ubuntu\"\nVERSION_ID=\"23.10\"", uname: "x86_64")
+        let platform = try? PlatformParser.parsePlatform(
+            osRelease: "NAME=\"Ubuntu\"\nVERSION_ID=\"23.10\"", uname: "x86_64")
         #expect(platform != nil)
         #expect(throws: ProvisioningError.unsupportedPlatform("Ubuntu 23, x86_64")) {
             try PlatformParser.ensureSupported(platform!)
@@ -315,17 +354,18 @@ struct PlatformCheckTests {
 
     @Test func unknownArchRejected() {
         #expect(throws: PlatformParser.PlatformError.unknownArch("armv7l")) {
-            try PlatformParser.parsePlatform(osRelease: "NAME=\"Debian GNU/Linux\"\nVERSION_ID=\"12\"", uname: "armv7l")
+            try PlatformParser.parsePlatform(
+                osRelease: "NAME=\"Debian GNU/Linux\"\nVERSION_ID=\"12\"", uname: "armv7l")
         }
     }
 
     @Test func probeOutputParsed() throws {
         let output = """
-        NAME="Ubuntu"
-        VERSION_ID="24.04"
-        ---VPNCHAIN---
-        x86_64
-        """
+            NAME="Ubuntu"
+            VERSION_ID="24.04"
+            ---VPNCHAIN---
+            x86_64
+            """
         let platform = try PlatformParser.parseProbeOutput(output)
         #expect(platform.majorVersion == 24)
         try PlatformParser.ensureSupported(platform)

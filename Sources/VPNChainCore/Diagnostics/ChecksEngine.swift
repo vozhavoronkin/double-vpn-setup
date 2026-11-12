@@ -54,12 +54,17 @@ public struct CheckResult: Sendable, Identifiable {
 /// Движок проверок (задача 6.2): выполняет декларативные проверки на нужном сервере.
 public enum ChecksEngine {
     /// Чистая оценка результата команды.
-    public static func evaluate(_ check: ServerCheck, result: SSHExecResult) -> (passed: Bool, hint: String?) {
+    public static func evaluate(_ check: ServerCheck, result: SSHExecResult) -> (
+        passed: Bool, hint: String?
+    ) {
         switch check.kind {
         case .exitCodeZero:
             return (result.exitCode == 0, result.exitCode == 0 ? nil : check.failureHint)
         case .outputContains(let needle):
-            return (result.stdout.contains(needle), result.stdout.contains(needle) ? nil : check.failureHint)
+            return (
+                result.stdout.contains(needle),
+                result.stdout.contains(needle) ? nil : check.failureHint
+            )
         case .outputContainsAll(let needles):
             let passed = needles.allSatisfy { result.stdout.contains($0) }
             return (passed, passed ? nil : check.failureHint)
@@ -84,15 +89,23 @@ public enum ChecksEngine {
         for check in checks {
             let runner: (any RemoteRunner)? = check.server == .entry ? entry : exit
             guard let runner else {
-                results.append(CheckResult(id: check.id, title: check.title, passed: false, hint: "сервер недоступен"))
+                results.append(
+                    CheckResult(
+                        id: check.id, title: check.title, passed: false, hint: "сервер недоступен"))
                 continue
             }
             do {
                 let result = try await runner.run(check.command, timeout: timeout, onOutput: nil)
                 let evaluation = evaluate(check, result: result)
-                results.append(CheckResult(id: check.id, title: check.title, passed: evaluation.passed, hint: evaluation.hint))
+                results.append(
+                    CheckResult(
+                        id: check.id, title: check.title, passed: evaluation.passed,
+                        hint: evaluation.hint))
             } catch {
-                results.append(CheckResult(id: check.id, title: check.title, passed: false, hint: "\(check.failureHint) (команда не выполнена: \(error))"))
+                results.append(
+                    CheckResult(
+                        id: check.id, title: check.title, passed: false,
+                        hint: "\(check.failureHint) (команда не выполнена: \(error))"))
             }
         }
         return results
@@ -108,7 +121,8 @@ public enum ChecksEngine {
                 title: "Handshake С1↔С2 не старше 2–3 минут",
                 command: StatusParsers.awgShowCommand,
                 kind: .handshakeWithin(seconds: 180),
-                failureHint: "Нет handshake: откройте UDP 51828 у провайдера сервера-выхода; сверьте S1/S2/H1–H4 (awg showconf awg-relay на обоих) и commit сборки",
+                failureHint:
+                    "Нет handshake: откройте UDP 51828 у провайдера сервера-выхода; сверьте S1/S2/H1–H4 (awg showconf awg-relay на обоих) и commit сборки",
                 server: .entry
             ),
             ServerCheck(
@@ -116,7 +130,8 @@ public enum ChecksEngine {
                 title: "Policy routing: метка клиентского трафика → таблица 51821",
                 command: StatusParsers.ipRuleCommand,
                 kind: .outputContainsAll(["fwmark \(ConfigureC1.mark)", "lookup 51821"]),
-                failureHint: "Правило потеряно (после reboot Docker пересоздаёт правила) — перезапустите vpn-chain.service",
+                failureHint:
+                    "Правило потеряно (после reboot Docker пересоздаёт правила) — перезапустите vpn-chain.service",
                 server: .entry
             ),
             ServerCheck(
@@ -148,7 +163,8 @@ public enum ChecksEngine {
                 title: "Интерфейс awg-relay поднят на сервере-выходе",
                 command: StatusParsers.awgShowCommand,
                 kind: .outputContains("interface: awg-relay"),
-                failureHint: "Relay на сервере-выходе не поднят — проверьте systemctl status awg-quick@awg-relay",
+                failureHint:
+                    "Relay на сервере-выходе не поднят — проверьте systemctl status awg-quick@awg-relay",
                 server: .exit
             ),
             ServerCheck(
@@ -156,7 +172,8 @@ public enum ChecksEngine {
                 title: "Порт 51828/UDP слушается на сервере-выходе",
                 command: StatusParsers.listeningCommand,
                 kind: .outputContains(":51828 "),
-                failureHint: "Порт не слушается — проверьте конфиг awg-relay и systemctl status awg-quick@awg-relay",
+                failureHint:
+                    "Порт не слушается — проверьте конфиг awg-relay и systemctl status awg-quick@awg-relay",
                 server: .exit
             ),
         ]
@@ -169,7 +186,8 @@ public enum ChecksEngine {
                         title: "Контейнер AmneziaVPN не затронут",
                         command: StatusParsers.containerAliveCommand(container: containerName),
                         kind: .exitCodeZero,
-                        failureHint: "Контейнер приложения не отвечает — relay не должен был его затронуть; проверьте docker ps",
+                        failureHint:
+                            "Контейнер приложения не отвечает — relay не должен был его затронуть; проверьте docker ps",
                         server: .entry
                     )
                 )
@@ -180,7 +198,8 @@ public enum ChecksEngine {
                     title: "MASQUERADE по Docker-подсети сервера-входа",
                     command: StatusParsers.natCommand,
                     kind: .outputContains("-s \(environment.dockerSubnet)"),
-                    failureHint: "MASQUERADE отсутствует — перезапустите vpn-chain-exit.service на сервере-выходе",
+                    failureHint:
+                        "MASQUERADE отсутствует — перезапустите vpn-chain-exit.service на сервере-выходе",
                     server: .exit
                 )
             )
@@ -207,27 +226,32 @@ public enum ManualChecklist {
         ManualCheck(
             id: "client-ip",
             title: "Внешний IP клиента",
-            instruction: "Подключитесь в AmneziaVPN и откройте 2ip.ru / ifconfig.me — должен отображаться IP сервера-выхода."
+            instruction:
+                "Подключитесь в AmneziaVPN и откройте 2ip.ru / ifconfig.me — должен отображаться IP сервера-выхода."
         ),
         ManualCheck(
             id: "dns-leak",
             title: "Утечки DNS",
-            instruction: "Откройте browserleaks.com/dns или dnsleaktest.com — резолвер один, из туннеля, без утечек."
+            instruction:
+                "Откройте browserleaks.com/dns или dnsleaktest.com — резолвер один, из туннеля, без утечек."
         ),
         ManualCheck(
             id: "ipv6",
             title: "Утечки IPv6",
-            instruction: "Откройте test-ipv6.com — IPv6 отсутствует или не течёт (правило VPNCHAIN6)."
+            instruction:
+                "Откройте test-ipv6.com — IPv6 отсутствует или не течёт (правило VPNCHAIN6)."
         ),
         ManualCheck(
             id: "reboot",
             title: "Персистентность после reboot",
-            instruction: "Перезагрузите оба сервера и повторите проверки — всё должно восстановиться само (юниты awg-quick@awg-relay и vpn-chain)."
+            instruction:
+                "Перезагрузите оба сервера и повторите проверки — всё должно восстановиться само (юниты awg-quick@awg-relay и vpn-chain)."
         ),
         ManualCheck(
             id: "kill-switch",
             title: "Серверный kill-switch",
-            instruction: "На сервере-входе: systemctl stop awg-quick@awg-relay → у клиента страницы не открываются и реальный IP не светится; systemctl start — снова работает."
+            instruction:
+                "На сервере-входе: systemctl stop awg-quick@awg-relay → у клиента страницы не открываются и реальный IP не светится; systemctl start — снова работает."
         ),
     ]
 }

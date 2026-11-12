@@ -79,19 +79,22 @@ public enum PlatformParser {
     /// Полная проверка поддержки: бросает `ProvisioningError.unsupportedPlatform` для неподдерживаемых комбинаций.
     public static func ensureSupported(_ platform: ServerPlatform) throws {
         guard ServerPlatform.isSupported(os: platform.os, majorVersion: platform.majorVersion),
-              ServerPlatform.Arch.allCases.contains(platform.arch) else {
+            ServerPlatform.Arch.allCases.contains(platform.arch)
+        else {
             throw ProvisioningError.unsupportedPlatform(platform.displayName)
         }
     }
 
     /// Контрольная команда для сбора платформы одной строкой.
-    public static let probeCommand = "cat /etc/os-release 2>/dev/null; echo '---VPNCHAIN---'; uname -m"
+    public static let probeCommand =
+        "cat /etc/os-release 2>/dev/null; echo '---VPNCHAIN---'; uname -m"
 
     /// Разбор вывода probeCommand.
     public static func parseProbeOutput(_ output: String) throws -> ServerPlatform {
         let parts = output.components(separatedBy: "---VPNCHAIN---")
         let osRelease = parts.first ?? ""
-        let uname = parts.dropFirst().first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        let uname =
+            parts.dropFirst().first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         guard !uname.isEmpty else {
             throw PlatformError.unknownArch("")
         }

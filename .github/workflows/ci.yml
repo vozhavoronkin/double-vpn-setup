@@ -9,6 +9,14 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: swift-format lint
+        run: xcrun swift-format lint --strict -r -p Sources Tests Package.swift
+
   test:
     runs-on: macos-15
     steps:

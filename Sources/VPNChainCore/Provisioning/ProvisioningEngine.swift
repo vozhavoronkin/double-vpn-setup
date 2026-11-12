@@ -10,7 +10,10 @@ public struct ProvisioningInput: Sendable {
     public let s1Keys: WireGuardKeyPair
     public let s2Keys: WireGuardKeyPair
 
-    public init(s2Address: String, obf: ObfuscationParams, s1Keys: WireGuardKeyPair, s2Keys: WireGuardKeyPair) {
+    public init(
+        s2Address: String, obf: ObfuscationParams, s1Keys: WireGuardKeyPair,
+        s2Keys: WireGuardKeyPair
+    ) {
         self.s2Address = s2Address
         self.obf = obf
         self.s1Keys = s1Keys
@@ -70,7 +73,10 @@ public final class ProvisioningEngine: @unchecked Sendable {
         /// Таймаут обычной команды.
         public var commandTimeout: TimeInterval = 300
 
-        public init(verifyAttempts: Int = 10, verifyDelay: TimeInterval = 15, commandTimeout: TimeInterval = 300) {
+        public init(
+            verifyAttempts: Int = 10, verifyDelay: TimeInterval = 15,
+            commandTimeout: TimeInterval = 300
+        ) {
             self.verifyAttempts = verifyAttempts
             self.verifyDelay = verifyDelay
             self.commandTimeout = commandTimeout
@@ -90,7 +96,13 @@ public final class ProvisioningEngine: @unchecked Sendable {
     private let onLog: @Sendable (ServerRole, String) -> Void
 
     /// Состояние, накопленное шагами (детект → конфигурация).
-    private let stateBox: LockedBox<(containerName: String?, environment: ChainState.Environment?, secrets: ProvisioningInput?)> = .init((nil, nil, nil))
+    private let stateBox:
+        LockedBox<
+            (
+                containerName: String?, environment: ChainState.Environment?,
+                secrets: ProvisioningInput?
+            )
+        > = .init((nil, nil, nil))
 
     public init(
         c1: any RemoteRunner,
@@ -160,10 +172,12 @@ public final class ProvisioningEngine: @unchecked Sendable {
         var secrets = input
         var reused = false
         let loadCommand = """
-        for f in s1-relay.key s1-relay.pub s2-relay.key s2-relay.pub obf.conf; do echo "==VPNCHAIN-FILE $f=="; cat /etc/amnezia/chain/$f 2>/dev/null; done
-        """
+            for f in s1-relay.key s1-relay.pub s2-relay.key s2-relay.pub obf.conf; do echo "==VPNCHAIN-FILE $f=="; cat /etc/amnezia/chain/$f 2>/dev/null; done
+            """
         let existing = try await c1.run(loadCommand, timeout: 30, onOutput: nil)
-        if let state = try? Self.parseExistingState(existing.stdout, environment: detection.environment) {
+        if let state = try? Self.parseExistingState(
+            existing.stdout, environment: detection.environment)
+        {
             secrets = ProvisioningInput(
                 s2Address: input.s2Address,
                 obf: state.obf,
@@ -185,16 +199,24 @@ public final class ProvisioningEngine: @unchecked Sendable {
             commitTools: AmneziaPins.tools
         )
         let deliveries = [
-            FileDelivery.command(path: "/etc/amnezia/chain/s1-relay.key", content: secrets.s1Keys.privateKey),
-            FileDelivery.command(path: "/etc/amnezia/chain/s1-relay.pub", content: secrets.s1Keys.publicKey),
-            FileDelivery.command(path: "/etc/amnezia/chain/s2-relay.key", content: secrets.s2Keys.privateKey),
-            FileDelivery.command(path: "/etc/amnezia/chain/s2-relay.pub", content: secrets.s2Keys.publicKey),
-            FileDelivery.command(path: "/etc/amnezia/chain/obf.conf", content: secrets.obf.ordered.map { "\($0.name)=\($0.value)" }.joined(separator: "\n")),
+            FileDelivery.command(
+                path: "/etc/amnezia/chain/s1-relay.key", content: secrets.s1Keys.privateKey),
+            FileDelivery.command(
+                path: "/etc/amnezia/chain/s1-relay.pub", content: secrets.s1Keys.publicKey),
+            FileDelivery.command(
+                path: "/etc/amnezia/chain/s2-relay.key", content: secrets.s2Keys.privateKey),
+            FileDelivery.command(
+                path: "/etc/amnezia/chain/s2-relay.pub", content: secrets.s2Keys.publicKey),
+            FileDelivery.command(
+                path: "/etc/amnezia/chain/obf.conf",
+                content: secrets.obf.ordered.map { "\($0.name)=\($0.value)" }.joined(
+                    separator: "\n")),
             FileDelivery.command(path: "/etc/amnezia/chain/env", content: environment.fileContent),
         ].joined(separator: "\n")
         let stateResult = try await c1.run(deliveries, timeout: 60, onOutput: nil)
         guard stateResult.succeeded else {
-            throw ProvisioningError.commandFailed(step: "detect-c1", exitCode: stateResult.exitCode, stderr: stateResult.stderr)
+            throw ProvisioningError.commandFailed(
+                step: "detect-c1", exitCode: stateResult.exitCode, stderr: stateResult.stderr)
         }
 
         stateBox.withLock { box in
@@ -202,16 +224,20 @@ public final class ProvisioningEngine: @unchecked Sendable {
             box.environment = environment
             box.secrets = secrets
         }
-        let migrationNote = detection.migratedFromDefaultBridge
+        let migrationNote =
+            detection.migratedFromDefaultBridge
             ? "Контейнер \(detection.containerName) перенесён с дефолтного bridge на выделенную сеть \(detection.environment.bridge) (\(detection.environment.dockerSubnet)). "
             : ""
-        return migrationNote + (reused
-            ? "переиспользованы существующие секреты (идемпотентность)"
-            : "сгенерированы новые ключи и параметры обфускации")
+        return migrationNote
+            + (reused
+                ? "переиспользованы существующие секреты (идемпотентность)"
+                : "сгенерированы новые ключи и параметры обфускации")
     }
 
     /// Разбор ранее сохранённого состояния (секреты из файлов С1 + окружение из детекта).
-    static func parseExistingState(_ output: String, environment: ChainState.Environment) throws -> ChainState {
+    static func parseExistingState(_ output: String, environment: ChainState.Environment) throws
+        -> ChainState
+    {
         var files: [String: String] = [:]
         var currentFile: String?
         for line in output.components(separatedBy: .newlines) {
@@ -245,7 +271,8 @@ public final class ProvisioningEngine: @unchecked Sendable {
                     // Решение по Go обязательно и на повторном прогоне: клон уже есть,
                     // но без него fallback пропускается и сборка падает с «go: not found».
                     if action.id == "go-source" {
-                        installedFallbackGo = try await resolveGoAndFallback(on: runner, role: role, arch: platform.arch)
+                        installedFallbackGo = try await resolveGoAndFallback(
+                            on: runner, role: role, arch: platform.arch)
                     }
                     continue
                 }
@@ -255,7 +282,8 @@ public final class ProvisioningEngine: @unchecked Sendable {
             // Go-решение принимается ПОСЛЕ клона amneziawg-go: без go.mod
             // fallback-действие пропускается и сборка падает с «go: not found».
             if action.id == "go-source" {
-                installedFallbackGo = try await resolveGoAndFallback(on: runner, role: role, arch: platform.arch)
+                installedFallbackGo = try await resolveGoAndFallback(
+                    on: runner, role: role, arch: platform.arch)
             }
             if action.id == "go-build", installedFallbackGo {
                 log(role, "сборка выполнена свежим Go из /usr/local/go")
@@ -286,8 +314,11 @@ public final class ProvisioningEngine: @unchecked Sendable {
     }
 
     /// Решение по Go: версия из go.mod склонированного репозитория против системной.
-    private func resolveGoDecision(on runner: any RemoteRunner, role: ServerRole, arch: ServerPlatform.Arch) async throws -> GoDecision {
-        let goModResult = try await runner.run("grep '^go ' \(SoftwareInstallPlan.goDir)/go.mod", timeout: 30, onOutput: nil)
+    private func resolveGoDecision(
+        on runner: any RemoteRunner, role: ServerRole, arch: ServerPlatform.Arch
+    ) async throws -> GoDecision {
+        let goModResult = try await runner.run(
+            "grep '^go ' \(SoftwareInstallPlan.goDir)/go.mod", timeout: 30, onOutput: nil)
         let goVersionResult = try? await runner.run("go version", timeout: 30, onOutput: nil)
         let decision = SoftwareInstallPlan.goBinaryDecision(
             goModOutput: goModResult.stdout,
@@ -297,7 +328,9 @@ public final class ProvisioningEngine: @unchecked Sendable {
         return decision
     }
 
-    private func apply(_ action: ShellAction, on runner: any RemoteRunner, role: ServerRole) async throws {
+    private func apply(_ action: ShellAction, on runner: any RemoteRunner, role: ServerRole)
+        async throws
+    {
         log(role, "→ \(action.title)")
         let result = try await runner.run(action.apply, timeout: action.timeout) { [log] chunk in
             log(role, "\(chunk)")
@@ -307,7 +340,9 @@ public final class ProvisioningEngine: @unchecked Sendable {
             let diagCommand = Self.failureDiagnosticsCommand(for: action)
             var journal = ""
             if diagCommand != "true" {
-                if let diag = try? await runner.run(diagCommand, timeout: 30, onOutput: nil), !diag.stdout.isEmpty {
+                if let diag = try? await runner.run(diagCommand, timeout: 30, onOutput: nil),
+                    !diag.stdout.isEmpty
+                {
                     journal = "\n--- журнал юнита ---\n" + diag.stdout
                     log(role, journal)
                 }
@@ -334,13 +369,17 @@ public final class ProvisioningEngine: @unchecked Sendable {
             parts.append("bash -x /usr/local/bin/vpn-chain-rules.sh 2>&1 | tail -40 || true")
         }
         if action.apply.contains("vpn-chain") {
-            parts.append("journalctl -u vpn-chain.service -u vpn-chain-exit.service --no-pager -n 25 2>/dev/null | tail -30")
-            parts.append("systemctl status vpn-chain-exit.service --no-pager 2>/dev/null | head -12")
+            parts.append(
+                "journalctl -u vpn-chain.service -u vpn-chain-exit.service --no-pager -n 25 2>/dev/null | tail -30"
+            )
+            parts.append(
+                "systemctl status vpn-chain-exit.service --no-pager 2>/dev/null | head -12")
         }
         // Для собственных действий по awg-quick (enable/stop). Упоминание awg-quick
         // внутри юнита vpn-chain-exit (строка After=) чужой журнал не тянет.
         if action.apply.contains("awg-quick@awg-relay"), !action.apply.contains("vpn-chain") {
-            parts.append("journalctl -u awg-quick@awg-relay --no-pager -n 25 2>/dev/null | tail -30")
+            parts.append(
+                "journalctl -u awg-quick@awg-relay --no-pager -n 25 2>/dev/null | tail -30")
             parts.append("systemctl status awg-quick@awg-relay --no-pager 2>/dev/null | head -12")
         }
         guard !parts.isEmpty else { return "true" }
@@ -365,7 +404,10 @@ public final class ProvisioningEngine: @unchecked Sendable {
             dockerSubnet: environment.dockerSubnet,
             clientSubnet: environment.clientSubnet
         )
-        for action in ConfigureC2.actions(configContent: config, wanInterface: wan, dockerSubnet: environment.dockerSubnet, clientSubnet: environment.clientSubnet) {
+        for action in ConfigureC2.actions(
+            configContent: config, wanInterface: wan, dockerSubnet: environment.dockerSubnet,
+            clientSubnet: environment.clientSubnet)
+        {
             try await apply(action, on: c2, role: .exit)
         }
         return "конфигурация С2 применена (WAN: \(wan))"
@@ -391,7 +433,9 @@ public final class ProvisioningEngine: @unchecked Sendable {
             s2RelayPublicKey: secrets.s2Keys.publicKey,
             s2IP: input.s2Address
         )
-        for action in ConfigureC1.actions(configContent: config, bridge: environment.bridge, clientPort: clientPort) {
+        for action in ConfigureC1.actions(
+            configContent: config, bridge: environment.bridge, clientPort: clientPort)
+        {
             try await apply(action, on: c1, role: .entry)
         }
         return "конфигурация С1 применена"

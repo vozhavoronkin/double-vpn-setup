@@ -49,9 +49,13 @@ final class StatusViewModel: ObservableObject {
 
     /// Итоговый вердикт: недоступность серверов отличаем от непройденных проверок.
     var overallHealth: ChainHealth {
-        guard snapshot != nil || !checkResults.isEmpty || errorText != nil else { return .notChecked }
+        guard snapshot != nil || !checkResults.isEmpty || errorText != nil else {
+            return .notChecked
+        }
         if snapshot == nil { return .offline }
-        let unreachable = [isUnreachable(snapshot?.entry), isUnreachable(snapshot?.exit)].filter { $0 }.count
+        let unreachable = [isUnreachable(snapshot?.entry), isUnreachable(snapshot?.exit)].filter {
+            $0
+        }.count
         if unreachable == 2 { return .offline }
         if unreachable == 1 { return .attention }
         if checkResults.isEmpty { return .notChecked }
@@ -94,11 +98,19 @@ final class StatusViewModel: ObservableObject {
                 let c2 = SSHClient(options: try checker.connectOptions(for: exit))
                 try await c1.connect()
                 try await c2.connect()
-                defer { Task { await c1.close(); await c2.close() } }
+                defer {
+                    Task {
+                        await c1.close()
+                        await c2.close()
+                    }
+                }
 
                 // Окружение может отсутствовать (цепочка не развёрнута) — часть проверок тогда скрыта.
-                let envResult = try? await c1.run(StatusParsers.environmentCommand, timeout: 30, onOutput: nil)
-                let environment = envResult.flatMap { try? ChainStateParser.parseEnvironment($0.stdout) }
+                let envResult = try? await c1.run(
+                    StatusParsers.environmentCommand, timeout: 30, onOutput: nil)
+                let environment = envResult.flatMap {
+                    try? ChainStateParser.parseEnvironment($0.stdout)
+                }
                 self?.environment = environment
 
                 let collector = StatusCollector(environment: environment)

@@ -1,18 +1,22 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Тесты задачи 3.4: рендер конфигов 9.1/9.2 и команды доставки файлов.
 struct ConfigTemplateTests {
-    private let obf = ObfuscationParams(jc: 5, jmin: 8, jmax: 80, s1: 100, s2: 77, h1: 9, h2: 10, h3: 11, h4: 12)
+    private let obf = ObfuscationParams(
+        jc: 5, jmin: 8, jmax: 80, s1: 100, s2: 77, h1: 9, h2: 10, h3: 11, h4: 12)
 
     @Test func c1ConfigMatchesTemplate9_1() {
-        let config = ConfigTemplates.renderC1(obf: obf, s1PrivateKey: "PRIV1", s2RelayPublicKey: "S2PUB", s2IP: "203.0.113.2")
+        let config = ConfigTemplates.renderC1(
+            obf: obf, s1PrivateKey: "PRIV1", s2RelayPublicKey: "S2PUB", s2IP: "203.0.113.2")
         #expect(config.contains("PrivateKey = PRIV1"))
         #expect(config.contains("Address = 10.99.0.1/24"))
         #expect(config.contains("Table = off"))
         #expect(config.contains("MTU = 1420"))
-        #expect(!config.contains("ListenPort =")) // присваивания ListenPort у С1 нет (комментарий ТЗ допустим)
+        // присваивания ListenPort у С1 нет (комментарий ТЗ допустим)
+        #expect(!config.contains("ListenPort ="))
         #expect(config.contains("PublicKey = S2PUB"))
         #expect(config.contains("Endpoint = 203.0.113.2:51828"))
         #expect(config.contains("AllowedIPs = 0.0.0.0/0"))
@@ -50,7 +54,8 @@ struct ConfigTemplateTests {
     }
 
     @Test func obfuscationParamsIdenticalOnBothEnds() {
-        let c1 = ConfigTemplates.renderC1(obf: obf, s1PrivateKey: "PRIV1", s2RelayPublicKey: "S2PUB", s2IP: "203.0.113.2")
+        let c1 = ConfigTemplates.renderC1(
+            obf: obf, s1PrivateKey: "PRIV1", s2RelayPublicKey: "S2PUB", s2IP: "203.0.113.2")
         let c2 = ConfigTemplates.renderC2(
             obf: obf,
             s2PrivateKey: "PRIV2",
@@ -67,7 +72,8 @@ struct ConfigTemplateTests {
 
     @Test func fileDeliverySetsPermissionsAndMarker() {
         let content = "[Interface]\nAddress = 10.99.0.1/24\n"
-        let command = FileDelivery.command(path: "/etc/amnezia/amneziawg/awg-relay.conf", content: content)
+        let command = FileDelivery.command(
+            path: "/etc/amnezia/amneziawg/awg-relay.conf", content: content)
         #expect(command.contains("mkdir -p -m 0700 '/etc/amnezia/amneziawg'"))
         #expect(command.contains("chmod 0600 '/etc/amnezia/amneziawg/awg-relay.conf'"))
         #expect(command.contains("<<'VPNCHAIN_EOF_"))
@@ -78,9 +84,11 @@ struct ConfigTemplateTests {
     /// Шебанг обязан остаться первой строкой файла (иначе systemd не исполнит скрипт).
     @Test func shebangStaysFirstLine() {
         let script = "#!/usr/bin/env bash\nset -Eeuo pipefail\necho ok\n"
-        let command = FileDelivery.command(path: "/usr/local/bin/x.sh", content: script, mode: "0755")
+        let command = FileDelivery.command(
+            path: "/usr/local/bin/x.sh", content: script, mode: "0755")
         let lines = command.components(separatedBy: "\n")
-        guard let catIndex = lines.firstIndex(where: { $0.contains("cat > '/usr/local/bin/x.sh'") }) else {
+        guard let catIndex = lines.firstIndex(where: { $0.contains("cat > '/usr/local/bin/x.sh'") })
+        else {
             Issue.record("Нет cat-строки")
             return
         }
@@ -90,7 +98,8 @@ struct ConfigTemplateTests {
         // Обычный файл — маркер первой строкой контента.
         let plain = FileDelivery.command(path: "/etc/x.conf", content: "key = value", mode: "0600")
         let plainLines = plain.components(separatedBy: "\n")
-        guard let plainCat = plainLines.firstIndex(where: { $0.contains("cat > '/etc/x.conf'") }) else {
+        guard let plainCat = plainLines.firstIndex(where: { $0.contains("cat > '/etc/x.conf'") })
+        else {
             Issue.record("Нет cat-строки")
             return
         }
@@ -101,23 +110,26 @@ struct ConfigTemplateTests {
     /// пишет persist-файл через `<<'VPNCHAIN_EOF'`) должно доставляться целиком.
     @Test func deliverySurvivesContentWithInnerHeredoc() {
         let content = """
-        #!/usr/bin/env bash
-        set -Eeuo pipefail
-        cat > /etc/sysctl.d/99-vpn-chain.conf <<'VPNCHAIN_EOF'
-        net.ipv4.ip_forward = 1
-        VPNCHAIN_EOF
-        echo done
-        """
-        let command = FileDelivery.command(path: "/usr/local/bin/vpn-chain-exit-rules.sh", content: content, mode: "0755")
+            #!/usr/bin/env bash
+            set -Eeuo pipefail
+            cat > /etc/sysctl.d/99-vpn-chain.conf <<'VPNCHAIN_EOF'
+            net.ipv4.ip_forward = 1
+            VPNCHAIN_EOF
+            echo done
+            """
+        let command = FileDelivery.command(
+            path: "/usr/local/bin/vpn-chain-exit-rules.sh", content: content, mode: "0755")
         let lines = command.components(separatedBy: "\n")
 
         // Разделитель не совпадает с вложенным и встречается ровно дважды (открытие/закрытие).
-        let catLine = lines.first { $0.contains("cat > '/usr/local/bin/vpn-chain-exit-rules.sh'") } ?? ""
+        let catLine =
+            lines.first { $0.contains("cat > '/usr/local/bin/vpn-chain-exit-rules.sh'") } ?? ""
         guard let openRange = catLine.range(of: "<<'") else {
             Issue.record("Нет открывающего heredoc")
             return
         }
-        let delimiter = String(catLine[openRange.upperBound...].dropLast(1)) // без закрывающей кавычки
+        // без закрывающей кавычки
+        let delimiter = String(catLine[openRange.upperBound...].dropLast(1))
         #expect(delimiter != "VPNCHAIN_EOF")
         // «Голая» строка-разделитель в команде ровно одна — закрывающая.
         let delimiterLines = lines.filter { $0 == delimiter }

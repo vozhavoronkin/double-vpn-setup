@@ -46,7 +46,9 @@ public struct ChainState: Sendable, Equatable {
     public let obf: ObfuscationParams
     public let environment: Environment
 
-    public init(s1: WireGuardKeyPair, s2: WireGuardKeyPair, obf: ObfuscationParams, environment: Environment) {
+    public init(
+        s1: WireGuardKeyPair, s2: WireGuardKeyPair, obf: ObfuscationParams, environment: Environment
+    ) {
         self.s1 = s1
         self.s2 = s2
         self.obf = obf
@@ -72,13 +74,17 @@ public enum ChainStateParser {
     /// Ожидаемые ключи: `s1-relay.key`, `s1-relay.pub`, `s2-relay.key`, `s2-relay.pub`,
     /// `obf.conf`, `env`.
     public static func parse(files: [String: String]) throws -> ChainState {
-        for required in ["s1-relay.key", "s1-relay.pub", "s2-relay.key", "s2-relay.pub", "obf.conf", "env"] {
+        for required in [
+            "s1-relay.key", "s1-relay.pub", "s2-relay.key", "s2-relay.pub", "obf.conf", "env",
+        ] {
             guard files[required] != nil else {
                 throw StateError.missingFile(required)
             }
         }
-        let s1 = try parseKeyPair(name: "s1-relay", privateKey: files["s1-relay.key"]!, publicKey: files["s1-relay.pub"]!)
-        let s2 = try parseKeyPair(name: "s2-relay", privateKey: files["s2-relay.key"]!, publicKey: files["s2-relay.pub"]!)
+        let s1 = try parseKeyPair(
+            name: "s1-relay", privateKey: files["s1-relay.key"]!, publicKey: files["s1-relay.pub"]!)
+        let s2 = try parseKeyPair(
+            name: "s2-relay", privateKey: files["s2-relay.key"]!, publicKey: files["s2-relay.pub"]!)
         let obf = try parseObfuscation(files["obf.conf"]!)
         let environment = try parseEnvironment(files["env"]!)
         return ChainState(s1: s1, s2: s2, obf: obf, environment: environment)
@@ -90,7 +96,9 @@ public enum ChainStateParser {
         content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func parseKeyPair(name: String, privateKey: String, publicKey: String) throws -> WireGuardKeyPair {
+    private static func parseKeyPair(name: String, privateKey: String, publicKey: String) throws
+        -> WireGuardKeyPair
+    {
         let privateBase64 = trimKey(privateKey)
         let publicBase64 = trimKey(publicKey)
         guard WireGuardKeys.isValidPrivateKey(privateBase64) else {
@@ -109,9 +117,11 @@ public enum ChainStateParser {
         var result: [String: String] = [:]
         for line in content.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"), let eq = trimmed.firstIndex(of: "=") else { continue }
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"), let eq = trimmed.firstIndex(of: "=")
+            else { continue }
             let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
-            let value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            let value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(
+                in: .whitespaces)
             result[key] = value
         }
         return result

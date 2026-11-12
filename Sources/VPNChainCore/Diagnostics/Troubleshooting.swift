@@ -40,7 +40,8 @@ public enum Troubleshooting {
             return SymptomGuide(
                 symptom: symptom,
                 title: "Сломалось после добавления пользователя в приложении",
-                explanation: "Приложение AmneziaVPN переписало конфиг контейнера при добавлении пользователя.",
+                explanation:
+                    "Приложение AmneziaVPN переписало конфиг контейнера при добавлении пользователя.",
                 checks: [],
                 advice: [
                     "Это ожидаемое поведение — host-level relay от него не зависит, ничего делать не нужно.",
@@ -60,13 +61,14 @@ public enum Troubleshooting {
                             title: "Подсеть в AllowedIPs С2 соответствует текущей",
                             command: "cat /etc/amnezia/amneziawg/awg-relay.conf",
                             kind: .outputContains(env.dockerSubnet),
-                            failureHint: "В конфиге С2 устаревшая подсеть — перепримените установку",
+                            failureHint:
+                                "В конфиге С2 устаревшая подсеть — перепримените установку",
                             server: .exit
-                        ),
+                        )
                     ]
                 } ?? [],
                 advice: [
-                    "Перепримените установку: движок заново детектирует подсеть и обновит конфиг сервера-выхода.",
+                    "Перепримените установку: движок заново детектирует подсеть и обновит конфиг сервера-выхода."
                 ],
                 suggestsReapply: true
             )
@@ -75,7 +77,8 @@ public enum Troubleshooting {
             return SymptomGuide(
                 symptom: symptom,
                 title: "Пропал SSH на сервере-входе",
-                explanation: "Ошибка в policy routing: правило затронуло host-трафик. Такого быть не должно — тоннелируется только трафик с меткой клиентских соединений.",
+                explanation:
+                    "Ошибка в policy routing: правило затронуло host-трафик. Такого быть не должно — тоннелируется только трафик с меткой клиентских соединений.",
                 checks: [],
                 advice: [
                     "Через консоль провайдера выполните: \(rescue)",
@@ -108,12 +111,13 @@ public enum Troubleshooting {
                         title: "VPNCHAIN6 подключена в ip6tables",
                         command: "ip6tables -S DOCKER-USER 2>/dev/null || ip6tables -S FORWARD",
                         kind: .outputContains("VPNCHAIN6"),
-                        failureHint: "Правило не на месте — перезапустите vpn-chain.service на сервере-входе",
+                        failureHint:
+                            "Правило не на месте — перезапустите vpn-chain.service на сервере-входе",
                         server: .entry
-                    ),
+                    )
                 ],
                 advice: [
-                    "Перезапустите vpn-chain.service на сервере-входе: systemctl restart vpn-chain.service",
+                    "Перезапустите vpn-chain.service на сервере-входе: systemctl restart vpn-chain.service"
                 ],
                 suggestsReapply: false
             )
@@ -129,9 +133,10 @@ public enum Troubleshooting {
                 title: "Параметры обфускации на сервере-входе",
                 command: "awg showconf awg-relay",
                 kind: .outputContainsAll(["S1 =", "S2 =", "H1 ="]),
-                failureHint: "Конфиг relay не содержит параметров обфускации — перепримените конфигурацию",
+                failureHint:
+                    "Конфиг relay не содержит параметров обфускации — перепримените конфигурацию",
                 server: .entry
-            ),
+            )
         ]
         if let s2Address, !s2Address.isEmpty {
             checks.insert(
@@ -140,7 +145,8 @@ public enum Troubleshooting {
                     title: "UDP 51828 достижим с сервера-входа",
                     command: "nc -uvz -w 3 \(s2Address) 51828 >/dev/null 2>&1",
                     kind: .exitCodeZero,
-                    failureHint: "Порт закрыт: откройте UDP 51828 в firewall/cloud-панели провайдера сервера-выхода (ufw allow 51828/udp)",
+                    failureHint:
+                        "Порт закрыт: откройте UDP 51828 в firewall/cloud-панели провайдера сервера-выхода (ufw allow 51828/udp)",
                     server: .entry
                 ),
                 at: 0
@@ -161,13 +167,16 @@ public enum Troubleshooting {
         )
     }
 
-    private static func handshakeButNoInternetGuide(environment: ChainState.Environment?, symptom: Symptom) -> SymptomGuide {
+    private static func handshakeButNoInternetGuide(
+        environment: ChainState.Environment?, symptom: Symptom
+    ) -> SymptomGuide {
         var allowedIPsCheck = ServerCheck(
             id: "allowed-ips",
             title: "AllowedIPs пира содержит подсети сервера-входа",
             command: "cat /etc/amnezia/amneziawg/awg-relay.conf",
             kind: .outputContains("AllowedIPs = 10.99.0.0/24"),
-            failureHint: "В AllowedIPs пира нет Docker-подсети сервера-входа — перепримените конфигурацию",
+            failureHint:
+                "В AllowedIPs пира нет Docker-подсети сервера-входа — перепримените конфигурацию",
             server: .exit
         )
         if let dockerSubnet = environment?.dockerSubnet {
@@ -176,7 +185,8 @@ public enum Troubleshooting {
                 title: "AllowedIPs пира содержит подсети сервера-входа",
                 command: "cat /etc/amnezia/amneziawg/awg-relay.conf",
                 kind: .outputContains(dockerSubnet),
-                failureHint: "В AllowedIPs пира нет Docker-подсети \(dockerSubnet) — перепримените конфигурацию",
+                failureHint:
+                    "В AllowedIPs пира нет Docker-подсети \(dockerSubnet) — перепримените конфигурацию",
                 server: .exit
             )
         }
@@ -190,7 +200,8 @@ public enum Troubleshooting {
                     title: "ip_forward включён на сервере-выходе",
                     command: "sysctl -n net.ipv4.ip_forward",
                     kind: .outputContains("1"),
-                    failureHint: "ip_forward выключен — выполните sysctl -w net.ipv4.ip_forward=1 и проверьте юнит vpn-chain-exit",
+                    failureHint:
+                        "ip_forward выключен — выполните sysctl -w net.ipv4.ip_forward=1 и проверьте юнит vpn-chain-exit",
                     server: .exit
                 ),
                 ServerCheck(

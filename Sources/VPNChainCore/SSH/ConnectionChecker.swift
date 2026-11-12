@@ -32,7 +32,8 @@ public enum OSReleaseParser {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.hasPrefix("#"), let eq = trimmed.firstIndex(of: "=") else { continue }
             let key = trimmed[..<eq].trimmingCharacters(in: .whitespaces)
-            var value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            var value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(
+                in: .whitespaces)
             if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
                 value = String(value.dropFirst().dropLast())
             }
@@ -92,7 +93,8 @@ public struct ConnectionChecker: Sendable {
             auth = .key(material)
         }
         let fingerprint = profile.hostKeyFingerprint
-        let policy = SSHHostKeyPolicy.tofu(expectedFingerprint: fingerprint) { [confirmUnknownFingerprint] candidate in
+        let policy = SSHHostKeyPolicy.tofu(expectedFingerprint: fingerprint) {
+            [confirmUnknownFingerprint] candidate in
             await confirmUnknownFingerprint(candidate)
         }
         return SSHConnectOptions(
@@ -114,15 +116,18 @@ public struct ConnectionChecker: Sendable {
             try await client.connect()
             // Контрольная команда: os-release может отсутствовать (мягкий сбой), uname обязателен.
             let probe = """
-            cat /etc/os-release 2>/dev/null; echo "---VPNCHAIN---"; uname -m
-            """
+                cat /etc/os-release 2>/dev/null; echo "---VPNCHAIN---"; uname -m
+                """
             let result = try await client.run(probe, timeout: 20)
             guard result.succeeded else {
-                throw SSHError.connectionFailed("контрольная команда вернула код \(result.exitCode ?? -1)")
+                throw SSHError.connectionFailed(
+                    "контрольная команда вернула код \(result.exitCode ?? -1)")
             }
             let parts = result.stdout.components(separatedBy: "---VPNCHAIN---")
             let osRelease = parts.first ?? ""
-            let arch = parts.dropFirst().first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+            let arch =
+                parts.dropFirst().first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                ?? ""
             guard !arch.isEmpty else {
                 throw SSHError.connectionFailed("не удалось определить архитектуру (uname -m)")
             }

@@ -31,58 +31,59 @@ public enum ConfigureC2 {
         let clientLines: String
         if let clientSubnet, !clientSubnet.isEmpty {
             clientLines = """
-            iptables -t nat -C POSTROUTING -s '\(clientSubnet)' -o "$WAN" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s '\(clientSubnet)' -o "$WAN" -j MASQUERADE
-            """
+                iptables -t nat -C POSTROUTING -s '\(clientSubnet)' -o "$WAN" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s '\(clientSubnet)' -o "$WAN" -j MASQUERADE
+                """
         } else {
-            clientLines = "# клиентская подсеть не обнаружена — MASQUERADE только по Docker-подсети С1"
+            clientLines =
+                "# клиентская подсеть не обнаружена — MASQUERADE только по Docker-подсети С1"
         }
         return """
-        #!/usr/bin/env bash
-        set -Eeuo pipefail
-        # managed-by: amnezia-chain
+            #!/usr/bin/env bash
+            set -Eeuo pipefail
+            # managed-by: amnezia-chain
 
-        WAN='\(wanInterface)'
-        DOCKER_SUBNET='\(dockerSubnet)'
+            WAN='\(wanInterface)'
+            DOCKER_SUBNET='\(dockerSubnet)'
 
-        sysctl -w net.ipv4.ip_forward=1
-        mkdir -p /etc/sysctl.d
-        if [ -f /etc/sysctl.d/99-vpn-chain.conf ]; then cp -f /etc/sysctl.d/99-vpn-chain.conf "/etc/sysctl.d/99-vpn-chain.conf.bak.$(date +%s)"; fi
-        cat > /etc/sysctl.d/99-vpn-chain.conf <<'VPNCHAIN_EOF'
-        # managed-by: amnezia-chain
-        net.ipv4.ip_forward = 1
-        VPNCHAIN_EOF
+            sysctl -w net.ipv4.ip_forward=1
+            mkdir -p /etc/sysctl.d
+            if [ -f /etc/sysctl.d/99-vpn-chain.conf ]; then cp -f /etc/sysctl.d/99-vpn-chain.conf "/etc/sysctl.d/99-vpn-chain.conf.bak.$(date +%s)"; fi
+            cat > /etc/sysctl.d/99-vpn-chain.conf <<'VPNCHAIN_EOF'
+            # managed-by: amnezia-chain
+            net.ipv4.ip_forward = 1
+            VPNCHAIN_EOF
 
-        # SSH не блокируется: только добавляем разрешения
-        iptables -C INPUT -p udp --dport 51828 -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p udp --dport 51828 -j ACCEPT
-        iptables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -I FORWARD 1 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-        iptables -C FORWARD -i awg-relay -o "$WAN" -j ACCEPT 2>/dev/null || iptables -A FORWARD -i awg-relay -o "$WAN" -j ACCEPT
-        iptables -C FORWARD -i "$WAN" -o awg-relay -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -A FORWARD -i "$WAN" -o awg-relay -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-        iptables -t nat -C POSTROUTING -s "$DOCKER_SUBNET" -o "$WAN" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$DOCKER_SUBNET" -o "$WAN" -j MASQUERADE
-        \(clientLines)
-        # Регрессия приёмки: Docker на С1 делает SNAT клиентского трафика в адрес туннеля
-        # (10.99.0.1), и без этого правила он уходил в интернет с частным источником —
-        # ответы не возвращались, интернета у клиента не было.
-        iptables -t nat -C POSTROUTING -s 10.99.0.0/24 -o "$WAN" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.99.0.0/24 -o "$WAN" -j MASQUERADE
+            # SSH не блокируется: только добавляем разрешения
+            iptables -C INPUT -p udp --dport 51828 -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p udp --dport 51828 -j ACCEPT
+            iptables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -I FORWARD 1 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+            iptables -C FORWARD -i awg-relay -o "$WAN" -j ACCEPT 2>/dev/null || iptables -A FORWARD -i awg-relay -o "$WAN" -j ACCEPT
+            iptables -C FORWARD -i "$WAN" -o awg-relay -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -A FORWARD -i "$WAN" -o awg-relay -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+            iptables -t nat -C POSTROUTING -s "$DOCKER_SUBNET" -o "$WAN" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$DOCKER_SUBNET" -o "$WAN" -j MASQUERADE
+            \(clientLines)
+            # Регрессия приёмки: Docker на С1 делает SNAT клиентского трафика в адрес туннеля
+            # (10.99.0.1), и без этого правила он уходил в интернет с частным источником —
+            # ответы не возвращались, интернета у клиента не было.
+            iptables -t nat -C POSTROUTING -s 10.99.0.0/24 -o "$WAN" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.99.0.0/24 -o "$WAN" -j MASQUERADE
 
-        echo "vpn-chain: правила выхода применены"
-        """
+            echo "vpn-chain: правила выхода применены"
+            """
     }
 
     /// Юнит персистентности `vpn-chain-exit.service` (ТЗ раздел 7, шаг 5).
     public static let exitUnitTemplate: String = """
-    [Unit]
-    Description=Amnezia chain exit: NAT/FORWARD rules for awg-relay
-    After=network-online.target awg-quick@awg-relay.service
-    Wants=network-online.target
+        [Unit]
+        Description=Amnezia chain exit: NAT/FORWARD rules for awg-relay
+        After=network-online.target awg-quick@awg-relay.service
+        Wants=network-online.target
 
-    [Service]
-    Type=oneshot
-    ExecStart=\(rulesScriptPath)
-    RemainAfterExit=yes
+        [Service]
+        Type=oneshot
+        ExecStart=\(rulesScriptPath)
+        RemainAfterExit=yes
 
-    [Install]
-    WantedBy=multi-user.target
-    """
+        [Install]
+        WantedBy=multi-user.target
+        """
 
     /// Установка скрипта правил и юнита, запуск применения правил (restart: переприменяется
     /// гарантированно, даже если юнит уже активен — регрессия приёмки).
@@ -93,17 +94,19 @@ public enum ConfigureC2 {
     ) -> String {
         let scriptDelivery = FileDelivery.command(
             path: rulesScriptPath,
-            content: renderRulesScript(wanInterface: wanInterface, dockerSubnet: dockerSubnet, clientSubnet: clientSubnet),
+            content: renderRulesScript(
+                wanInterface: wanInterface, dockerSubnet: dockerSubnet, clientSubnet: clientSubnet),
             mode: "0755"
         )
-        let unitDelivery = FileDelivery.command(path: unitPath, content: exitUnitTemplate, mode: "0644")
+        let unitDelivery = FileDelivery.command(
+            path: unitPath, content: exitUnitTemplate, mode: "0644")
         return """
-        \(scriptDelivery)
-        \(unitDelivery)
-        systemctl daemon-reload
-        systemctl enable vpn-chain-exit.service
-        systemctl restart vpn-chain-exit.service
-        """
+            \(scriptDelivery)
+            \(unitDelivery)
+            systemctl daemon-reload
+            systemctl enable vpn-chain-exit.service
+            systemctl restart vpn-chain-exit.service
+            """
     }
 
     // MARK: Действия шага «Configure C2»
@@ -150,7 +153,9 @@ public enum ConfigureC2 {
                 id: "c2-rules",
                 title: "Правила выхода: INPUT/MSS/FORWARD/MASQUERADE + юнит vpn-chain-exit",
                 check: nil,
-                apply: installRulesCommand(wanInterface: wanInterface, dockerSubnet: dockerSubnet, clientSubnet: clientSubnet),
+                apply: installRulesCommand(
+                    wanInterface: wanInterface, dockerSubnet: dockerSubnet,
+                    clientSubnet: clientSubnet),
                 timeout: 120
             ),
         ]

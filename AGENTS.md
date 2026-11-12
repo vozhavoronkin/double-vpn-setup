@@ -18,13 +18,17 @@ swift build                                 # сборка core-модуля
 xcodegen generate                           # пересоздать VPNChainSetup.xcodeproj из project.yml
 xcodebuild -project VPNChainSetup.xcodeproj -scheme VPNChainSetup \
   -destination 'platform=macOS' build       # сборка приложения
+xcrun swift-format format -i -r Sources Tests Package.swift   # форматирование
+xcrun swift-format lint --strict -r -p Sources Tests Package.swift  # проверка (как в CI)
 openspec validate macos-vpn-chain-setup-app --strict
 ```
 
 - `VPNChainSetup.xcodeproj` генерируется и **не** хранится в git — после добавления/удаления
   файлов в `Sources/VPNChainSetup` запускайте `xcodegen generate`.
-- Линтера в проекте нет; стиль — по окружающему коду (4 пробела, `public` в core, русские
-  doc-комментарии к нетривиальным местам).
+- Форматирование — swift-format из тулчейна Xcode (`xcrun swift-format`; swift-format не на
+  PATH, поэтому только через `xcrun`), конфиг `.swift-format` в корне: ширина 100, отступ
+  4 пробела. CI (job `lint`) падает на нарушениях; перед коммитом прогоняйте обе команды выше.
+  Остальной стиль — `public` в core, русские doc-комментарии к нетривиальным местам.
 
 ## Архитектура
 

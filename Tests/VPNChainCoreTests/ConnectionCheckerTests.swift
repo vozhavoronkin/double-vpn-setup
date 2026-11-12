@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Тесты задачи 2.3: парсер os-release, uname, и логика TOFU/pinned-политик.
@@ -8,12 +9,12 @@ struct ConnectionCheckerTests {
 
     @Test func parsesUbuntuOSRelease() {
         let fixture = """
-        NAME="Ubuntu"
-        PRETTY_NAME="Ubuntu 22.04.3 LTS"
-        VERSION_ID="22.04"
-        ID=ubuntu
-        HOME_URL="https://www.ubuntu.com/"
-        """
+            NAME="Ubuntu"
+            PRETTY_NAME="Ubuntu 22.04.3 LTS"
+            VERSION_ID="22.04"
+            ID=ubuntu
+            HOME_URL="https://www.ubuntu.com/"
+            """
         let parsed = OSReleaseParser.parse(fixture)
         #expect(parsed.name == "Ubuntu")
         #expect(parsed.version == "22.04")
@@ -21,12 +22,12 @@ struct ConnectionCheckerTests {
 
     @Test func parsesDebianOSRelease() {
         let fixture = """
-        PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
-        NAME="Debian GNU/Linux"
-        VERSION_ID="12"
-        VERSION="12 (bookworm)"
-        ID=debian
-        """
+            PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+            NAME="Debian GNU/Linux"
+            VERSION_ID="12"
+            VERSION="12 (bookworm)"
+            ID=debian
+            """
         let parsed = OSReleaseParser.parse(fixture)
         #expect(parsed.name == "Debian GNU/Linux")
         #expect(parsed.version == "12")
@@ -34,10 +35,10 @@ struct ConnectionCheckerTests {
 
     @Test func osReleaseWithoutQuotesAndComments() {
         let fixture = """
-        # comment line
-        NAME=Alpine
-        VERSION_ID=3.19
-        """
+            # comment line
+            NAME=Alpine
+            VERSION_ID=3.19
+            """
         let parsed = OSReleaseParser.parse(fixture)
         #expect(parsed.name == "Alpine")
         #expect(parsed.version == "3.19")
@@ -52,7 +53,8 @@ struct ConnectionCheckerTests {
     @Test func environmentDisplayText() {
         let env = ServerEnvironment(osName: "Ubuntu", osVersion: "22.04", architecture: "x86_64")
         #expect(env.displayText == "Ubuntu 22.04, x86_64")
-        let noVersion = ServerEnvironment(osName: "Debian GNU/Linux", osVersion: nil, architecture: "aarch64")
+        let noVersion = ServerEnvironment(
+            osName: "Debian GNU/Linux", osVersion: nil, architecture: "aarch64")
         #expect(noVersion.displayText == "Debian GNU/Linux, aarch64")
     }
 
@@ -65,7 +67,8 @@ struct ConnectionCheckerTests {
     }
 
     @Test func tofuWithStoredFingerprintRejectsMismatch() async {
-        let tofu = SSHHostKeyPolicy.tofu(expectedFingerprint: "SHA256:known", confirm: { _ in true })
+        let tofu = SSHHostKeyPolicy.tofu(
+            expectedFingerprint: "SHA256:known", confirm: { _ in true })
         // Совпадает с сохранённым — принимается, подтверждение не вызывается.
         #expect(await SSHClient.policyAccepts(tofu, fingerprint: "SHA256:known"))
         // Не совпадает — отклоняется, даже если пользователь готов подтвердить:

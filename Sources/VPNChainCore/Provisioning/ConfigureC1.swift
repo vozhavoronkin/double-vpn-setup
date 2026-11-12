@@ -100,19 +100,19 @@ public enum ConfigureC1 {
 
     /// Юнит `vpn-chain.service` (ТЗ 9.3).
     public static let serviceUnitTemplate: String = """
-    [Unit]
-    Description=Amnezia chain: policy routing for AWG relay
-    After=docker.service awg-quick@awg-relay.service network-online.target
-    Wants=network-online.target
+        [Unit]
+        Description=Amnezia chain: policy routing for AWG relay
+        After=docker.service awg-quick@awg-relay.service network-online.target
+        Wants=network-online.target
 
-    [Service]
-    Type=oneshot
-    ExecStart=\(rulesScriptPath)
-    RemainAfterExit=yes
+        [Service]
+        Type=oneshot
+        ExecStart=\(rulesScriptPath)
+        RemainAfterExit=yes
 
-    [Install]
-    WantedBy=multi-user.target
-    """
+        [Install]
+        WantedBy=multi-user.target
+        """
 
     /// Установка скрипта правил и юнита, запуск применения правил (restart).
     public static func installRulesCommand(bridge: String, clientPort: String) -> String {
@@ -121,19 +121,22 @@ public enum ConfigureC1 {
             content: renderRulesScript(bridge: bridge, clientPort: clientPort),
             mode: "0755"
         )
-        let unitDelivery = FileDelivery.command(path: serviceUnitPath, content: serviceUnitTemplate, mode: "0644")
+        let unitDelivery = FileDelivery.command(
+            path: serviceUnitPath, content: serviceUnitTemplate, mode: "0644")
         return """
-        \(scriptDelivery)
-        \(unitDelivery)
-        systemctl daemon-reload
-        systemctl enable vpn-chain.service
-        systemctl restart vpn-chain.service
-        """
+            \(scriptDelivery)
+            \(unitDelivery)
+            systemctl daemon-reload
+            systemctl enable vpn-chain.service
+            systemctl restart vpn-chain.service
+            """
     }
 
     // MARK: Действия шага «Configure C1»
 
-    public static func actions(configContent: String, bridge: String, clientPort: String) -> [ShellAction] {
+    public static func actions(configContent: String, bridge: String, clientPort: String)
+        -> [ShellAction]
+    {
         [
             ShellAction(
                 id: "c1-config",
@@ -161,7 +164,8 @@ public enum ConfigureC1 {
             ),
             ShellAction(
                 id: "c1-rules",
-                title: "Policy routing по метке + исключение ответов клиентам + blackhole kill-switch + DOCKER-USER + юнит vpn-chain",
+                title:
+                    "Policy routing по метке + исключение ответов клиентам + blackhole kill-switch + DOCKER-USER + юнит vpn-chain",
                 check: nil,
                 apply: installRulesCommand(bridge: bridge, clientPort: clientPort),
                 timeout: 120

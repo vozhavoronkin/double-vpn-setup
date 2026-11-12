@@ -36,7 +36,8 @@ struct ClientView: View {
             Card(
                 title: "Настройка вручную",
                 systemImage: "hand.tap",
-                subtitle: "Клиентская сторона настраивается в приложении AmneziaVPN на этом Mac — приложение показывает порядок действий"
+                subtitle:
+                    "Клиентская сторона настраивается в приложении AmneziaVPN на этом Mac — приложение показывает порядок действий"
             ) {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(Array(clientSteps.enumerated()), id: \.offset) { index, step in

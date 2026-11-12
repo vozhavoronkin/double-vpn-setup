@@ -5,7 +5,7 @@ let package = Package(
     name: "VPNChainCore",
     platforms: [.macOS(.v13)],
     products: [
-        .library(name: "VPNChainCore", targets: ["VPNChainCore"]),
+        .library(name: "VPNChainCore", targets: ["VPNChainCore"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio", from: "2.70.0"),

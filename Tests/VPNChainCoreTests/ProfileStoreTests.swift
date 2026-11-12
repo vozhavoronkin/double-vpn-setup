@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import Testing
+
 @testable import VPNChainCore
 
 /// Тесты задачи 2.2: профили в UserDefaults, секреты — в Keychain.
@@ -10,14 +11,16 @@ struct ProfileStoreTests {
         let suiteName = "vpnchain-tests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        return ProfileStore(defaults: defaults, keychain: KeychainStore(service: "ru.vpnchain.tests"))
+        return ProfileStore(
+            defaults: defaults, keychain: KeychainStore(service: "ru.vpnchain.tests"))
     }
 
     @Test func passwordGoesToKeychainAndNotToUserDefaults() throws {
         let suiteName = "vpnchain-tests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let store = ProfileStore(defaults: defaults, keychain: KeychainStore(service: "ru.vpnchain.tests"))
+        let store = ProfileStore(
+            defaults: defaults, keychain: KeychainStore(service: "ru.vpnchain.tests"))
 
         let profile = ConnectionProfile(
             role: .entry,
@@ -57,7 +60,7 @@ struct ProfileStoreTests {
         let loaded = store.profile(id: profile.id)
         #expect(loaded == profile)
         #expect(store.profile(for: .exit)?.id == profile.id)
-        #expect(store.passphrase(profileID: profile.id) == nil) // фраза ещё не задана
+        #expect(store.passphrase(profileID: profile.id) == nil)  // фраза ещё не задана
     }
 
     @Test func deleteRemovesProfileAndSecrets() throws {
@@ -73,10 +76,12 @@ struct ProfileStoreTests {
     }
 
     @Test func validationRules() {
-        let emptyHost = ConnectionProfile(role: .entry, host: " ", user: "root", authKind: .password)
+        let emptyHost = ConnectionProfile(
+            role: .entry, host: " ", user: "root", authKind: .password)
         #expect(emptyHost.validate() == .hostEmpty)
 
-        let badPort = ConnectionProfile(role: .entry, host: "h", port: 0, user: "root", authKind: .password)
+        let badPort = ConnectionProfile(
+            role: .entry, host: "h", port: 0, user: "root", authKind: .password)
         #expect(badPort.validate() == .portOutOfRange)
 
         let emptyUser = ConnectionProfile(role: .entry, host: "h", user: "", authKind: .password)
@@ -91,9 +96,10 @@ struct ProfileStoreTests {
 
     @Test func readinessRequiresSecret() throws {
         let store = makeStore()
-        let passwordProfile = ConnectionProfile(role: .entry, host: "h", user: "root", authKind: .password)
+        let passwordProfile = ConnectionProfile(
+            role: .entry, host: "h", user: "root", authKind: .password)
         store.upsert(passwordProfile)
-        #expect(!store.isReady(passwordProfile)) // пароля ещё нет
+        #expect(!store.isReady(passwordProfile))  // пароля ещё нет
         try store.setPassword("x", profileID: passwordProfile.id)
         #expect(store.isReady(passwordProfile))
     }

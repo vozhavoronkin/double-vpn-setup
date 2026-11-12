@@ -44,18 +44,18 @@ public enum ConfigTemplates {
             allowedIPs = "AllowedIPs = 10.99.0.0/24, \(dockerSubnet)"
         }
         return """
-        [Interface]
-        PrivateKey = \(s2PrivateKey)
-        Address = 10.99.0.2/24
-        ListenPort = 51828
-        MTU = 1420
-        \(obfLines(obf))
+            [Interface]
+            PrivateKey = \(s2PrivateKey)
+            Address = 10.99.0.2/24
+            ListenPort = 51828
+            MTU = 1420
+            \(obfLines(obf))
 
-        [Peer]
-        # Сервер 1 (вход): принимает расшифрованный клиентский трафик
-        PublicKey = \(s1RelayPublicKey)
-        \(allowedIPs)
-        """
+            [Peer]
+            # Сервер 1 (вход): принимает расшифрованный клиентский трафик
+            PublicKey = \(s1RelayPublicKey)
+            \(allowedIPs)
+            """
     }
 
     private static func obfLines(_ obf: ObfuscationParams) -> String {
@@ -73,11 +73,13 @@ public enum ConfigTemplates {
 /// пишет persist-файл через `<<'VPNCHAIN_EOF'`) — фиксированный разделитель
 /// закрывался бы вложенной строкой и обрезал файл на середине.
 public enum FileDelivery {
-    public static func command(path: String, content: String, mode: String = "0600", backup: Bool = true) -> String {
+    public static func command(
+        path: String, content: String, mode: String = "0600", backup: Bool = true
+    ) -> String {
         let directory = (path as NSString).deletingLastPathComponent
         let delimiter = uniqueDelimiter(for: content)
         var lines = [
-            "mkdir -p -m 0700 '\(directory)'",
+            "mkdir -p -m 0700 '\(directory)'"
         ]
         if backup {
             lines.append("if [ -f '\(path)' ]; then cp -f '\(path)' '\(path).bak.$(date +%s)'; fi")

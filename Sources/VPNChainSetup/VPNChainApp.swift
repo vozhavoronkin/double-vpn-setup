@@ -43,7 +43,10 @@ struct VPNChainCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .toolbar) {
-            Button(actions?.sidebarVisible == false ? "Показать боковую панель" : "Скрыть боковую панель") {
+            Button(
+                actions?.sidebarVisible == false
+                    ? "Показать боковую панель" : "Скрыть боковую панель"
+            ) {
                 actions?.toggleSidebar()
             }
             .keyboardShortcut("s", modifiers: [.command, .control])

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Тесты задачи 3.3: парсер и валидатор состояния `/etc/amnezia/chain/`.
@@ -7,7 +8,8 @@ struct ChainStateParserTests {
     private func validFiles() throws -> [String: String] {
         let s1 = try WireGuardKeys.generateKeyPair(name: "s1-relay")
         let s2 = try WireGuardKeys.generateKeyPair(name: "s2-relay")
-        let obf = ObfuscationParams(jc: 5, jmin: 8, jmax: 80, s1: 100, s2: 77, h1: 9, h2: 10, h3: 11, h4: 12)
+        let obf = ObfuscationParams(
+            jc: 5, jmin: 8, jmax: 80, s1: 100, s2: 77, h1: 9, h2: 10, h3: 11, h4: 12)
         return [
             "s1-relay.key": s1.privateKey,
             "s1-relay.pub": s1.publicKey,
@@ -46,7 +48,10 @@ struct ChainStateParserTests {
         var files = try validFiles()
         let foreign = try WireGuardKeys.generateKeyPair(name: "other")
         files["s2-relay.pub"] = foreign.publicKey
-        #expect(throws: ChainStateParser.StateError.publicKeyMismatch("s2-relay.pub не соответствует приватному ключу")) {
+        #expect(
+            throws: ChainStateParser.StateError.publicKeyMismatch(
+                "s2-relay.pub не соответствует приватному ключу")
+        ) {
             try ChainStateParser.parse(files: files)
         }
     }
@@ -68,16 +73,16 @@ struct ChainStateParserTests {
     @Test func s2CollisionInStateIsReported() throws {
         var files = try validFiles()
         files["obf.conf"] = """
-        Jc=5
-        Jmin=8
-        Jmax=80
-        S1=100
-        S2=156
-        H1=9
-        H2=10
-        H3=11
-        H4=12
-        """
+            Jc=5
+            Jmin=8
+            Jmax=80
+            S1=100
+            S2=156
+            H1=9
+            H2=10
+            H3=11
+            H4=12
+            """
         do {
             _ = try ChainStateParser.parse(files: files)
             Issue.record("Ожидался invalidParams")
@@ -92,7 +97,10 @@ struct ChainStateParserTests {
     @Test func duplicateHInStateIsReported() throws {
         var files = try validFiles()
         files["obf.conf"] = "Jc=5\nJmin=8\nJmax=80\nS1=100\nS2=77\nH1=9\nH2=9\nH3=11\nH4=12"
-        #expect(throws: ChainStateParser.StateError.invalidParams("obf.conf: нарушение правила hValuesNotDistinct")) {
+        #expect(
+            throws: ChainStateParser.StateError.invalidParams(
+                "obf.conf: нарушение правила hValuesNotDistinct")
+        ) {
             try ChainStateParser.parse(files: files)
         }
     }

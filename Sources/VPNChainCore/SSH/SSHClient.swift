@@ -38,7 +38,8 @@ public final class SSHClient: @unchecked Sendable {
     /// Аутентификация фактически выполняется при первом exec; здесь проверяется
     /// доступность хоста и согласование параметров соединения.
     public func connect() async throws {
-        let validator = HostKeyValidator(policy: options.hostKeyPolicy, fingerprintSink: fingerprintSink)
+        let validator = HostKeyValidator(
+            policy: options.hostKeyPolicy, fingerprintSink: fingerprintSink)
         let bootstrap = ClientBootstrap(group: Self.group)
             .connectTimeout(.seconds(Int64(options.connectTimeout)))
             .channelInitializer { [state, options] channel in
@@ -65,7 +66,8 @@ public final class SSHClient: @unchecked Sendable {
         } catch let error as SSHError {
             throw error
         } catch {
-            throw SSHError.connectionFailed("\(options.host):\(options.port) — \(error.localizedDescription)")
+            throw SSHError.connectionFailed(
+                "\(options.host):\(options.port) — \(error.localizedDescription)")
         }
     }
 
@@ -121,14 +123,16 @@ public final class SSHClient: @unchecked Sendable {
                 completion: completion
             )
             let createPromise = eventLoop.makePromise(of: Channel.self)
-            handler.createChannel(createPromise, channelType: .session) { [childChannelBox] child, _ in
+            handler.createChannel(createPromise, channelType: .session) {
+                [childChannelBox] child, _ in
                 childChannelBox.withLock { $0 = child }
                 return child.pipeline.addHandler(session)
             }
             // Не удалось открыть канал — чаще всего отказ аутентификации.
             createPromise.futureResult.whenComplete { result in
                 if case .failure(let error) = result {
-                    completion.fail(SSHError.authFailed("канал не открыт: \(error.localizedDescription)"))
+                    completion.fail(
+                        SSHError.authFailed("канал не открыт: \(error.localizedDescription)"))
                 }
             }
             return completion.futureResult
@@ -188,12 +192,15 @@ public final class SSHClient: @unchecked Sendable {
     // MARK: - Внутреннее
 
     private func requireEventLoop() throws -> EventLoop {
-        let snapshot = state.withLock { ($0.eventLoop, $0.closed, $0.closeError, $0.didCompleteAuth) }
+        let snapshot = state.withLock {
+            ($0.eventLoop, $0.closed, $0.closeError, $0.didCompleteAuth)
+        }
         if let loop = snapshot.0, !snapshot.1 {
             return loop
         }
         if snapshot.1, !snapshot.3 {
-            throw snapshot.2 ?? SSHError.authFailed("сервер закрыл соединение до завершения аутентификации")
+            throw snapshot.2
+                ?? SSHError.authFailed("сервер закрыл соединение до завершения аутентификации")
         }
         throw SSHError.closedUnexpectedly("соединение закрыто")
     }
@@ -267,7 +274,8 @@ private final class AuthDelegate: NIOSSHClientUserAuthenticationDelegate, @unche
 }
 
 /// Делегат проверки host key: считает отпечаток и передаёт решение политике (TOFU).
-private final class HostKeyValidator: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
+private final class HostKeyValidator: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable
+{
     private let policy: SSHHostKeyPolicy
     private let fingerprintSink: LockedBox<String?>
 
@@ -276,7 +284,9 @@ private final class HostKeyValidator: NIOSSHClientServerAuthenticationDelegate, 
         self.fingerprintSink = fingerprintSink
     }
 
-    func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
+    func validateHostKey(
+        hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>
+    ) {
         let fingerprint = SSHClient.fingerprint(of: hostKey)
         fingerprintSink.withLock { $0 = fingerprint }
         Task { [policy] in

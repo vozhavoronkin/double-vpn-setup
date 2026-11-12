@@ -1,6 +1,7 @@
 import Foundation
 import Logging
 import Testing
+
 @testable import VPNChainCore
 
 /// Ловушка лог-сообщений для проверки санитизации.
@@ -52,10 +53,10 @@ struct LogSanitizationTests {
     @Test func pemPrivateKeyBlockIsMasked() {
         let (logger, capture) = makeLogger()
         let pem = """
-        -----BEGIN OPENSSH PRIVATE KEY-----
-        b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB
-        -----END OPENSSH PRIVATE KEY-----
-        """
+            -----BEGIN OPENSSH PRIVATE KEY-----
+            b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB
+            -----END OPENSSH PRIVATE KEY-----
+            """
         logger.warning("конфиг: \(pem)")
         let message = capture.captured.first?.message ?? ""
         #expect(!message.contains("b3BlbnNzaC1rZXktdjE"))
@@ -85,7 +86,8 @@ struct LogSanitizationTests {
         let suiteName = "vpnchain-tests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let store = ProfileStore(defaults: defaults, keychain: KeychainStore(service: "ru.vpnchain.tests"))
+        let store = ProfileStore(
+            defaults: defaults, keychain: KeychainStore(service: "ru.vpnchain.tests"))
         let profile = ConnectionProfile(role: .entry, host: "h", user: "root", authKind: .password)
 
         let secret = "leaked-password-9"

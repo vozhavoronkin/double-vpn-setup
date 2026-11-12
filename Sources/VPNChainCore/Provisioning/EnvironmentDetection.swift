@@ -15,7 +15,10 @@ public struct EnvironmentDetector: Sendable {
         /// Контейнер был перенесён с дефолтного bridge на выделенную сеть.
         public let migratedFromDefaultBridge: Bool
 
-        public init(containerName: String, environment: ChainState.Environment, migratedFromDefaultBridge: Bool = false) {
+        public init(
+            containerName: String, environment: ChainState.Environment,
+            migratedFromDefaultBridge: Bool = false
+        ) {
             self.containerName = containerName
             self.environment = environment
             self.migratedFromDefaultBridge = migratedFromDefaultBridge
@@ -59,7 +62,8 @@ public struct EnvironmentDetector: Sendable {
         for line in conf.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("ListenPort") else { continue }
-            let value = trimmed.split(separator: "=", maxSplits: 1).dropFirst().first?
+            let value =
+                trimmed.split(separator: "=", maxSplits: 1).dropFirst().first?
                 .trimmingCharacters(in: .whitespaces) ?? ""
             if let port = Int(value), (1...65535).contains(port) { return String(port) }
         }
@@ -81,7 +85,8 @@ public struct EnvironmentDetector: Sendable {
     /// Имя интерфейса из вывода `ip route get` / `ip route show` (токен после `dev`).
     public static func parseRouteDev(_ output: String) -> String? {
         for line in output.components(separatedBy: .newlines) {
-            let tokens = line.trimmingCharacters(in: .whitespaces).split(separator: " ").map(String.init)
+            let tokens = line.trimmingCharacters(in: .whitespaces).split(separator: " ").map(
+                String.init)
             if let devIndex = tokens.firstIndex(of: "dev"), tokens.count > devIndex + 1 {
                 return tokens[devIndex + 1]
             }
@@ -95,9 +100,11 @@ public struct EnvironmentDetector: Sendable {
         for line in output.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard let colon = trimmed.firstIndex(of: ":"),
-                  trimmed[..<colon].allSatisfy(\.isNumber) else { continue }
+                trimmed[..<colon].allSatisfy(\.isNumber)
+            else { continue }
             let rest = trimmed[trimmed.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-            let name = rest.split(separator: " ").first.map(String.init)?
+            let name =
+                rest.split(separator: " ").first.map(String.init)?
                 .split(separator: ":").first.map(String.init) ?? ""
             if !name.isEmpty, !names.contains(name) { names.append(name) }
         }
@@ -109,7 +116,8 @@ public struct EnvironmentDetector: Sendable {
     /// Приоритет: хост-интерфейс AmneziaWG (`amn*` — новая топология, трафик клиентов
     /// приходит именно туда) → интерфейс из `ip route get` до контейнера (старая
     /// топология: docker-бридж). `awg-relay` исключается всегда — это наш relay.
-    public static func ingressInterfaceName(routeDev: String?, interfaceNames: [String]) -> String? {
+    public static func ingressInterfaceName(routeDev: String?, interfaceNames: [String]) -> String?
+    {
         let amnezia = interfaceNames.first {
             let lower = $0.lowercased()
             return lower.hasPrefix("amn") && lower != "awg-relay"
@@ -141,9 +149,13 @@ public struct EnvironmentDetector: Sendable {
     /// гарантирован. Дефолтная сеть `bridge` (172.17.0.0/16) выбирается в последнюю
     /// очередь: эта подсеть есть практически на любом сервере с Docker и почти всегда
     /// коллидирует с сетями сервера-выхода.
-    public static func parseContainerNetworks(_ json: String) -> (networkName: String?, containerIP: String?) {
+    public static func parseContainerNetworks(_ json: String) -> (
+        networkName: String?, containerIP: String?
+    ) {
         guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], !object.isEmpty else {
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            !object.isEmpty
+        else {
             return (nil, nil)
         }
         let name: String?
@@ -165,16 +177,19 @@ public struct EnvironmentDetector: Sendable {
     }
 
     /// Разбор `docker network inspect`: ID сети и подсеть из IPAM.Config.
-    public static func parseNetworkInspect(_ json: String) -> (networkID: String?, subnet: String?) {
+    public static func parseNetworkInspect(_ json: String) -> (networkID: String?, subnet: String?)
+    {
         guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
             return (nil, nil)
         }
         let id = object["Id"] as? String
         var subnet: String?
         if let ipam = object["IPAM"] as? [String: Any],
-           let configs = ipam["Config"] as? [[String: Any]],
-           let first = configs.first {
+            let configs = ipam["Config"] as? [[String: Any]],
+            let first = configs.first
+        {
             subnet = first["Subnet"] as? String
         }
         return (id, subnet)
@@ -185,7 +200,8 @@ public struct EnvironmentDetector: Sendable {
         for line in wg0Conf.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("Address") else { continue }
-            let value = trimmed.split(separator: "=", maxSplits: 1).dropFirst().first
+            let value =
+                trimmed.split(separator: "=", maxSplits: 1).dropFirst().first
                 .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
             if let network = networkAddress(value) {
                 return network
@@ -197,7 +213,9 @@ public struct EnvironmentDetector: Sendable {
     /// Приводит `a.b.c.d/prefix` к адресу сети (обнуляет биты хоста). Только IPv4.
     public static func networkAddress(_ cidr: String) -> String? {
         let parts = cidr.split(separator: "/")
-        guard parts.count == 2, let prefix = Int(parts[1]), (0...32).contains(prefix) else { return nil }
+        guard parts.count == 2, let prefix = Int(parts[1]), (0...32).contains(prefix) else {
+            return nil
+        }
         let octets = parts[0].split(separator: ".").compactMap { UInt32($0) }
         guard octets.count == 4, octets.allSatisfy({ $0 <= 255 }) else { return nil }
         let ip = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]
@@ -220,7 +238,9 @@ public struct EnvironmentDetector: Sendable {
     }
 
     /// Кандидаты подсети для выделенной сети (в порядке приоритета).
-    public static let subnetCandidates = ["172.29.172.0/24", "172.28.0.0/16", "172.26.0.0/16", "10.50.0.0/16"]
+    public static let subnetCandidates = [
+        "172.29.172.0/24", "172.28.0.0/16", "172.26.0.0/16", "10.50.0.0/16",
+    ]
 
     /// Первый кандидат, не занятый маршрутами ни на одном из серверов.
     public static func pickFreeSubnet(routesC1: String, routesC2: String) -> String? {
@@ -233,7 +253,9 @@ public struct EnvironmentDetector: Sendable {
 
     /// Создать выделенную сеть, подключить контейнер, отключить от дефолтного bridge.
     /// Живые операции: контейнер не перезапускается, публикация портов переезжает на IP новой сети.
-    public static func migrationCommand(container: String, networkName: String, subnet: String) -> String {
+    public static func migrationCommand(container: String, networkName: String, subnet: String)
+        -> String
+    {
         """
         docker network create --subnet='\(subnet)' \(networkName) 2>/dev/null || true
         docker network connect \(networkName) \(container) 2>/dev/null || true
@@ -246,7 +268,8 @@ public struct EnvironmentDetector: Sendable {
     /// Полный детект окружения С1. Каждый шаг — отдельная команда, результат сохраняется в env.
     public func detect() async throws -> DetectionResult {
         // 1. Контейнер.
-        let namesResult = try await runner.run(Self.listContainersCommand, timeout: 15, onOutput: nil)
+        let namesResult = try await runner.run(
+            Self.listContainersCommand, timeout: 15, onOutput: nil)
         guard namesResult.succeeded else {
             throw ProvisioningError.dockerMissing(namesResult.stderr)
         }
@@ -256,9 +279,11 @@ public struct EnvironmentDetector: Sendable {
         }
 
         // 2. Сети контейнера.
-        let networksResult = try await runner.run(Self.containerNetworksCommand(container: container), timeout: 15, onOutput: nil)
+        let networksResult = try await runner.run(
+            Self.containerNetworksCommand(container: container), timeout: 15, onOutput: nil)
         guard networksResult.succeeded else {
-            throw ProvisioningError.parseFailed("docker inspect (Networks): \(networksResult.stderr)")
+            throw ProvisioningError.parseFailed(
+                "docker inspect (Networks): \(networksResult.stderr)")
         }
         let parsed = Self.parseContainerNetworks(networksResult.stdout)
         guard parsed.networkName != nil else {
@@ -273,65 +298,85 @@ public struct EnvironmentDetector: Sendable {
             let routes1 = try? await runner.run(Self.routesCommand, timeout: 30, onOutput: nil)
             var routes2 = ""
             if let exitRoutesRunner {
-                let result = try? await exitRoutesRunner.run(Self.routesCommand, timeout: 30, onOutput: nil)
+                let result = try? await exitRoutesRunner.run(
+                    Self.routesCommand, timeout: 30, onOutput: nil)
                 routes2 = result?.stdout ?? ""
             }
-            guard let subnet = Self.pickFreeSubnet(routesC1: routes1?.stdout ?? "", routesC2: routes2) else {
+            guard
+                let subnet = Self.pickFreeSubnet(routesC1: routes1?.stdout ?? "", routesC2: routes2)
+            else {
                 throw ProvisioningError.parseFailed(
                     "не удалось подобрать свободную подсеть для переноса контейнера с дефолтного bridge: все кандидаты заняты на одном из серверов"
                 )
             }
             let migration = try await runner.run(
-                Self.migrationCommand(container: container, networkName: Self.relayNetworkName, subnet: subnet),
+                Self.migrationCommand(
+                    container: container, networkName: Self.relayNetworkName, subnet: subnet),
                 timeout: 60,
                 onOutput: nil
             )
             guard migration.succeeded else {
-                throw ProvisioningError.commandFailed(step: "detect-c1", exitCode: migration.exitCode, stderr: migration.stderr)
+                throw ProvisioningError.commandFailed(
+                    step: "detect-c1", exitCode: migration.exitCode, stderr: migration.stderr)
             }
             // Повторная инспекция: контейнер должен остаться только на выделенной сети.
-            let reInspect = try await runner.run(Self.containerNetworksCommand(container: container), timeout: 15, onOutput: nil)
+            let reInspect = try await runner.run(
+                Self.containerNetworksCommand(container: container), timeout: 15, onOutput: nil)
             let reParsed = Self.parseContainerNetworks(reInspect.stdout)
-            guard let newName = reParsed.networkName, newName != "bridge", let newIP = reParsed.containerIP else {
-                throw ProvisioningError.parseFailed("после миграции контейнер не подключён к выделенной сети \(Self.relayNetworkName)")
+            guard let newName = reParsed.networkName, newName != "bridge",
+                let newIP = reParsed.containerIP
+            else {
+                throw ProvisioningError.parseFailed(
+                    "после миграции контейнер не подключён к выделенной сети \(Self.relayNetworkName)"
+                )
             }
             selectedNetworkName = newName
             selectedIP = newIP
             migrated = true
         }
         guard let containerIP = selectedIP else {
-            throw ProvisioningError.parseFailed("не удалось определить IP контейнера \(container) в сети \(selectedNetworkName)")
+            throw ProvisioningError.parseFailed(
+                "не удалось определить IP контейнера \(container) в сети \(selectedNetworkName)")
         }
 
         // 4. ID/подсеть выбранной сети → интерфейс хоста.
-        let networkResult = try await runner.run(Self.networkInspectCommand(network: selectedNetworkName), timeout: 15, onOutput: nil)
+        let networkResult = try await runner.run(
+            Self.networkInspectCommand(network: selectedNetworkName), timeout: 15, onOutput: nil)
         guard networkResult.succeeded else {
             throw ProvisioningError.parseFailed("docker network inspect: \(networkResult.stderr)")
         }
         let network = Self.parseNetworkInspect(networkResult.stdout)
         guard let networkID = network.networkID, let subnet = network.subnet else {
-            throw ProvisioningError.parseFailed("не удалось определить ID/подсеть сети \(selectedNetworkName)")
+            throw ProvisioningError.parseFailed(
+                "не удалось определить ID/подсеть сети \(selectedNetworkName)")
         }
-        let hostInterface = Self.hostInterfaceName(networkName: selectedNetworkName, networkID: networkID)
+        let hostInterface = Self.hostInterfaceName(
+            networkName: selectedNetworkName, networkID: networkID)
 
         // 4.5. Фактический интерфейс входа клиентского трафика: в новых AmneziaVPN
         // AWG-интерфейс (amn0) живёт на хосте, и трафик выходит не через docker-бридж.
         // Собираем список интерфейсов + ответ ядра (`ip route get` до IP контейнера).
         var routeDev: String?
-        if let routeGet = try? await runner.run(Self.routeGetCommand(containerIP: containerIP), timeout: 15, onOutput: nil),
-           routeGet.succeeded {
+        if let routeGet = try? await runner.run(
+            Self.routeGetCommand(containerIP: containerIP), timeout: 15, onOutput: nil),
+            routeGet.succeeded
+        {
             routeDev = Self.parseRouteDev(routeGet.stdout)
         }
         var interfaceNames: [String] = []
         if let addrShow = try? await runner.run(Self.interfacesCommand, timeout: 15, onOutput: nil),
-           addrShow.succeeded {
+            addrShow.succeeded
+        {
             interfaceNames = Self.parseInterfaceNames(addrShow.stdout)
         }
-        let ingressInterface = Self.ingressInterfaceName(routeDev: routeDev, interfaceNames: interfaceNames) ?? hostInterface
+        let ingressInterface =
+            Self.ingressInterfaceName(routeDev: routeDev, interfaceNames: interfaceNames)
+            ?? hostInterface
 
         // 5. Мягкий детект клиентской подсети и порта клиентского AWG (неуспех не останавливает
         // установку; порт обязателен для правил — проверяется в configureC1).
-        let wg0Result = try? await runner.run(Self.clientSubnetCommand(container: container), timeout: 15, onOutput: nil)
+        let wg0Result = try? await runner.run(
+            Self.clientSubnetCommand(container: container), timeout: 15, onOutput: nil)
         let clientSubnet = wg0Result.flatMap { Self.parseClientSubnet($0.stdout) }
         let clientPort = wg0Result.flatMap { Self.parseClientPort($0.stdout) }
 
@@ -352,13 +397,14 @@ public struct EnvironmentDetector: Sendable {
     }
 
     private func awaitRunnerClientSubnet(container: String) async throws -> SSHExecResult {
-        try await runner.run(Self.clientSubnetCommand(container: container), timeout: 15, onOutput: nil)
+        try await runner.run(
+            Self.clientSubnetCommand(container: container), timeout: 15, onOutput: nil)
     }
 }
 
-public extension ChainState.Environment {
+extension ChainState.Environment {
     /// Содержимое файла `/etc/amnezia/chain/env` (KEY=VALUE).
-    var fileContent: String {
+    public var fileContent: String {
         var lines = [
             "BRIDGE=\(bridge)",
             "DOCKER_SUBNET=\(dockerSubnet)",
