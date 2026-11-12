@@ -32,3 +32,10 @@
       `swift test --filter LogSanitizationTests`.
 - [x] 5.3 Полный `swift test` — 3 прогона подряд без флейков.
 - [x] 5.4 Причина флейка описана в PR (ссылка на анализ из design.md).
+
+## 6. Замечания ревью PR #14
+- [x] 6.1 `profileStoreRegistersSecretsForRedaction`: `defer store.delete` —
+      при throw из `setPassword` секрет не остаётся в глобальном редокторе.
+- [x] 6.2 Рекурсивная санитизация составных metadata (array/dictionary);
+      `.stringConvertible` задокументирован как `.string`-конверсия.
+- [x] 6.3 Заведён issue #15 на инъекцию `SecretRedactor` (корневая причина).

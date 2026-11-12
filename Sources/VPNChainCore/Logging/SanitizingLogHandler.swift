@@ -81,9 +81,7 @@ public struct SanitizingLogHandler: LogHandler {
         let redactedMetadata =
             metadata.isEmpty
             ? nil
-            : metadata.mapValues { value in
-                Logging.Logger.Metadata.Value(stringLiteral: SecretRedactor.redact("\(value)"))
-            }
+            : metadata.mapValues { Self.redactedMetadataValue($0) }
         underlying.log(
             event: LogEvent(
                 level: event.level,
@@ -95,6 +93,24 @@ public struct SanitizingLogHandler: LogHandler {
                 function: event.function,
                 line: event.line
             ))
+    }
+
+    /// Рекурсивно маскирует значение metadata, сохраняя структуру array/dictionary.
+    /// `.stringConvertible` сохранить тип нельзя — значение становится `.string`
+    /// (для текстового вывода это эквивалентно; потребителям структуры учесть).
+    private static func redactedMetadataValue(
+        _ value: Logging.Logger.Metadata.Value
+    ) -> Logging.Logger.Metadata.Value {
+        switch value {
+        case .string(let string):
+            return .string(SecretRedactor.redact(string))
+        case .stringConvertible(let convertible):
+            return .string(SecretRedactor.redact("\(convertible)"))
+        case .array(let values):
+            return .array(values.map { redactedMetadataValue($0) })
+        case .dictionary(let values):
+            return .dictionary(values.mapValues { redactedMetadataValue($0) })
+        }
     }
 }
 

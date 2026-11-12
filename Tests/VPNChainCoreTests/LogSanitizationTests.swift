@@ -83,15 +83,23 @@ extension SharedSecretStateTests.LogSanitizationTests {
         // Call-site metadata.
         logger.info("подключение", metadata: ["password": .string(secret)])
 
+        // Вложенные составные metadata: структура сохраняется, значения маскируются.
+        logger.info(
+            "диагностика",
+            metadata: ["context": .dictionary(["nested": .string(secret)])])
+
         let captured = capture.captured
-        #expect(captured.count == 2)
-        for event in captured {
+        #expect(captured.count == 3)
+        for event in captured.prefix(2) {
             let passwordValue = event.metadata?["password"].map { "\($0)" } ?? ""
             #expect(!passwordValue.contains(secret), "Секрет утёк в metadata: \(passwordValue)")
             #expect(passwordValue.contains("***"))
         }
+        let nestedValue = captured.last?.metadata?["context"].map { "\($0)" } ?? ""
+        #expect(!nestedValue.contains(secret), "Секрет утёк во вложенную metadata: \(nestedValue)")
+        #expect(nestedValue.contains("***"))
         #expect(captured.first?.message == "аутентификация")
-        #expect(captured.last?.message == "подключение")
+        #expect(captured.last?.message == "диагностика")
     }
 
     @Test func profileStoreRegistersSecretsForRedaction() throws {
@@ -101,6 +109,8 @@ extension SharedSecretStateTests.LogSanitizationTests {
         let store = ProfileStore(
             defaults: defaults, keychain: KeychainStore(service: "ru.vpnchain.tests"))
         let profile = ConnectionProfile(role: .entry, host: "h", user: "root", authKind: .password)
+        // Страховка: при throw из setPassword секрет не останется в глобальном редокторе.
+        defer { store.delete(id: profile.id) }
 
         let secret = "leaked-password-9"
         let before = SecretRedactor.redact("текст \(secret) конец")
