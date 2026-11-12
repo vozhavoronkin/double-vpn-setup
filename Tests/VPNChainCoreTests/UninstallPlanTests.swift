@@ -59,13 +59,15 @@ struct UninstallPlanTests {
         let commands = UninstallPlan.exitCommands(
             dockerSubnet: "172.26.0.0/16", clientSubnet: "10.8.1.0/24")
         let joined = commands.map { $0.command }.joined(separator: "\n")
-        // Удаление всех MASQUERADE по подсетям (правила создаются с `-o <WAN>`,
-        // поэтому удаляем по номеру правила).
+        // Удаление MASQUERADE по подсетям через точное совпадение токена в `iptables -S`
+        // (правила создаются с `-o <WAN>`, поэтому спецификация не совпадает без него).
         #expect(joined.contains("'172.26.0.0/16'"))
         #expect(joined.contains("'10.8.1.0/24'"))
         #expect(joined.contains("'10.99.0.0/24'"))
-        #expect(joined.contains("/MASQUERADE/"))
-        #expect(joined.contains("iptables -t nat -D POSTROUTING \"$n\""))
+        #expect(joined.contains("iptables -t nat -S POSTROUTING"))
+        #expect(joined.contains("index($0, \" -s \" s \" \")"))
+        #expect(joined.contains("!index($0, \"! -o \")"))
+        #expect(joined.contains("iptables -t nat -D POSTROUTING $rule"))
         #expect(joined.contains("vpn-chain-exit.service"))
         #expect(joined.contains("--dport 51828"))
     }

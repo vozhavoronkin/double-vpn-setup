@@ -60,7 +60,7 @@ final class ProxiesViewModel: ObservableObject {
         errorText = nil
         let store = self.store
         Task {
-            defer { Task { @MainActor [weak self] in self?.loading = false } }
+            defer { loading = false }
             do {
                 let connection = try await Self.connect(store: store)
                 defer { Task { await connection.close() } }
@@ -91,7 +91,7 @@ final class ProxiesViewModel: ObservableObject {
         let desiredEnabled = enabled
         let selected = selectedNetworks
         Task {
-            defer { Task { @MainActor [weak self] in self?.applying = false } }
+            defer { applying = false }
             do {
                 let connection = try await Self.connect(store: store)
                 defer { Task { await connection.close() } }
@@ -156,7 +156,7 @@ final class ProxiesViewModel: ObservableObject {
         let store = self.store
         let selected = selectedNetworks
         Task {
-            defer { Task { @MainActor [weak self] in self?.checking = false } }
+            defer { checking = false }
             do {
                 let connection = try await Self.connect(store: store)
                 defer { Task { await connection.close() } }
@@ -178,11 +178,9 @@ final class ProxiesViewModel: ObservableObject {
                     else { continue }
                     let containerNetworks = Set(
                         ProxyNetworkDetector.parseContainerNetworkNames(networksResult.stdout))
-                    let participates =
-                        !selected.isEmpty
-                        ? !containerNetworks.isDisjoint(with: selected)
-                        : !containerNetworks.isDisjoint(with: Set(availableNetworks.map(\.name)))
-                    guard participates else { continue }
+                    // Только реально выбранные сети: иначе проверка показывала бы
+                    // контейнеры, трафик которых режим не маркирует.
+                    guard !containerNetworks.isDisjoint(with: selected) else { continue }
                     let result = try? await connection.entry.run(
                         ProxyNetworkDetector.containerEgressCommand(container: name), timeout: 30,
                         onOutput: nil)
@@ -198,7 +196,9 @@ final class ProxiesViewModel: ObservableObject {
                 egressChecks = checks
                 message =
                     checks.isEmpty
-                    ? "Нет контейнеров в включённых сетях — проверять нечего"
+                    ? (selected.isEmpty
+                        ? "Сети не выбраны — сначала отметьте сети и примените правила"
+                        : "Нет контейнеров в выбранных сетях — проверять нечего")
                     : checks.allSatisfy(\.matches)
                         ? "Все контейнеры выходят через сервер-выход"
                         : "Часть контейнеров выходит не через сервер-выход (или без curl/wget внутри)"
@@ -239,8 +239,8 @@ final class ProxiesViewModel: ObservableObject {
     }
 
     private static func connect(store: ProfileStore) async throws -> ServerConnection {
-        let checker = ConnectionChecker(store: store) { fingerprint in
-            await ConnectionsViewModel.confirmFingerprint(host: "", fingerprint: fingerprint)
+        let checker = ConnectionChecker(store: store) { host, fingerprint in
+            await ConnectionsViewModel.confirmFingerprint(host: host, fingerprint: fingerprint)
         }
         guard let entry = store.profile(for: .entry), let exit = store.profile(for: .exit) else {
             throw ConnectionChecker.CheckError.profileInvalid(

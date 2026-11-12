@@ -142,7 +142,7 @@ final class ConnectionsViewModel: ObservableObject {
         let store = self.store
         let host = profile.host
         Task { [weak self] in
-            let checker = ConnectionChecker(store: store) { fingerprint in
+            let checker = ConnectionChecker(store: store) { host, fingerprint in
                 await Self.confirmFingerprint(host: host, fingerprint: fingerprint)
             }
             do {

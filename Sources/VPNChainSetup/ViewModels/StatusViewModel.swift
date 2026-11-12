@@ -87,8 +87,8 @@ final class StatusViewModel: ObservableObject {
         }
         refreshing = true
         errorText = nil
-        let checker = ConnectionChecker(store: store) { fingerprint in
-            await ConnectionsViewModel.confirmFingerprint(host: "", fingerprint: fingerprint)
+        let checker = ConnectionChecker(store: store) { host, fingerprint in
+            await ConnectionsViewModel.confirmFingerprint(host: host, fingerprint: fingerprint)
         }
 
         Task { [weak self] in

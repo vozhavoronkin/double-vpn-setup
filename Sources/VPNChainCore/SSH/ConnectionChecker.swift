@@ -61,11 +61,13 @@ public struct ConnectionChecker: Sendable {
     private let store: ProfileStore
     /// Замыкание UI-подтверждения неизвестного отпечатка (TOFU).
     /// Возвращает true, если пользователь принял отпечаток.
-    private let confirmUnknownFingerprint: @Sendable (String) async -> Bool
+    private let confirmUnknownFingerprint: @Sendable (String, String) async -> Bool
 
     public init(
         store: ProfileStore,
-        confirmUnknownFingerprint: @escaping @Sendable (String) async -> Bool = { _ in true }
+        confirmUnknownFingerprint: @escaping @Sendable (String, String) async -> Bool = {
+            _, _ in true
+        }
     ) {
         self.store = store
         self.confirmUnknownFingerprint = confirmUnknownFingerprint
@@ -94,8 +96,8 @@ public struct ConnectionChecker: Sendable {
         }
         let fingerprint = profile.hostKeyFingerprint
         let policy = SSHHostKeyPolicy.tofu(expectedFingerprint: fingerprint) {
-            [confirmUnknownFingerprint] candidate in
-            await confirmUnknownFingerprint(candidate)
+            [confirmUnknownFingerprint, host = profile.host] candidate in
+            await confirmUnknownFingerprint(host, candidate)
         }
         return SSHConnectOptions(
             host: profile.host,

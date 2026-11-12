@@ -12,7 +12,7 @@
 ## Команды
 
 ```bash
-swift test                                  # все unit-тесты (176 шт., ~1 c)
+swift test                                  # все unit-тесты (178 шт., ~1 c)
 swift test --filter NameOfTest              # один тест/сьют
 swift build                                 # сборка core-модуля
 xcodegen generate                           # пересоздать VPNChainSetup.xcodeproj из project.yml

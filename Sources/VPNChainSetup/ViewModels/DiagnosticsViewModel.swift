@@ -62,9 +62,9 @@ final class DiagnosticsViewModel: ObservableObject {
         Task {
             defer { Task { @MainActor [weak self] in self?.diagnosing = false } }
             do {
-                let checker = ConnectionChecker(store: store) { fingerprint in
+                let checker = ConnectionChecker(store: store) { host, fingerprint in
                     await ConnectionsViewModel.confirmFingerprint(
-                        host: "", fingerprint: fingerprint)
+                        host: host, fingerprint: fingerprint)
                 }
                 guard let entry = store.profile(for: .entry), let exit = store.profile(for: .exit)
                 else {
@@ -108,9 +108,9 @@ final class DiagnosticsViewModel: ObservableObject {
                 // Для uninstall сервера-выхода нужна подсеть из env сервера-входа (best effort).
                 var environment: ChainState.Environment?
                 if role == .exit, let entry = store.profile(for: .entry) {
-                    let checker = ConnectionChecker(store: store) { fingerprint in
+                    let checker = ConnectionChecker(store: store) { host, fingerprint in
                         await ConnectionsViewModel.confirmFingerprint(
-                            host: "", fingerprint: fingerprint)
+                            host: host, fingerprint: fingerprint)
                     }
                     let entryClient = try? SSHClient(options: checker.connectOptions(for: entry))
                     try? await entryClient?.connect()
@@ -127,9 +127,9 @@ final class DiagnosticsViewModel: ObservableObject {
                     uninstallReport = "профиль сервера не настроен"
                     return
                 }
-                let checker = ConnectionChecker(store: store) { fingerprint in
+                let checker = ConnectionChecker(store: store) { host, fingerprint in
                     await ConnectionsViewModel.confirmFingerprint(
-                        host: "", fingerprint: fingerprint)
+                        host: host, fingerprint: fingerprint)
                 }
                 let target = SSHClient(options: try checker.connectOptions(for: profile))
                 try await target.connect()

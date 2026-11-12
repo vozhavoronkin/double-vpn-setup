@@ -131,6 +131,60 @@ public enum ProxyEgressRules {
         "255.255.255.255/32",
     ]
 
+    // MARK: Валидация значений перед рендером
+
+    /// Проверка формата IPv4-подсети в CIDR (`172.18.0.0/16`).
+    public static func isValidSubnet(_ value: String) -> Bool {
+        let parts = value.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, let prefix = Int(parts[1]), (0...32).contains(prefix) else {
+            return false
+        }
+        return isValidIPv4(String(parts[0]))
+    }
+
+    /// Проверка формата IPv4-адреса.
+    public static func isValidIPv4(_ value: String) -> Bool {
+        let octets = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard octets.count == 4 else { return false }
+        return octets.allSatisfy { part in
+            guard let number = Int(part), (0...255).contains(number) else { return false }
+            return String(number) == part
+        }
+    }
+
+    /// Проверка имени сетевого интерфейса.
+    public static func isValidInterface(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 15
+            && value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "_.-".contains($0)) }
+    }
+
+    /// Проверка всех значений, попадающих в shell-скрипты режима.
+    /// Вызывается перед применением; рендер предполагает уже проверенные значения.
+    public static func validate(
+        networks: [ProxyNetwork],
+        exitIP: String,
+        wanInterface: String
+    ) throws {
+        guard isValidIPv4(exitIP) else {
+            throw ProvisioningError.parseFailed(
+                "некорректный IP сервера-выхода: «\(exitIP)»")
+        }
+        if !wanInterface.isEmpty, !isValidInterface(wanInterface) {
+            throw ProvisioningError.parseFailed(
+                "некорректное имя WAN-интерфейса: «\(wanInterface)»")
+        }
+        for network in networks {
+            guard isValidSubnet(network.subnet) else {
+                throw ProvisioningError.parseFailed(
+                    "некорректная подсеть сети «\(network.name)»: «\(network.subnet)»")
+            }
+            guard isValidInterface(network.bridge) else {
+                throw ProvisioningError.parseFailed(
+                    "некорректный bridge сети «\(network.name)»: «\(network.bridge)»")
+            }
+        }
+    }
+
     // MARK: Отбор сетей
 
     /// Сети, которые попадут в режим: сеть AmneziaVPN и сети, исключённые
@@ -219,8 +273,11 @@ public enum ProxyEgressRules {
                 # адреса туннеля, поэтому контейнерный трафик входит в awg-relay уже
                 # с адресом туннеля. Маршруты и NAT на сервере-выходе не нужны — это
                 # заодно исключает конфликт одинаковых Docker-подсетей на входе и выходе.
+                # Правило вставляется в начало POSTROUTING (выше RETURN -o awg-relay из
+                # основной цепочки) намеренно: инвариант «Docker не SNAT'ит клиентский
+                # трафик» сохраняется для остальных пакетов, а нам нужен именно SNAT.
                 for s in \(networks.map { "'\($0.subnet)'" }.joined(separator: " ")); do
-                  iptables -t nat -C POSTROUTING -s "$s" -o awg-relay -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -s "$s" -o awg-relay -j MASQUERADE
+                  iptables -t nat -C POSTROUTING -s "$s" -o \(ConfigureC1.relayInterface) -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -s "$s" -o \(ConfigureC1.relayInterface) -j MASQUERADE
                 done
                 """
         } else {
@@ -230,7 +287,7 @@ public enum ProxyEgressRules {
                 """
         }
         let cleanup = """
-            MARK=0x51
+            MARK=\(ConfigureC1.mark)
             EXIT_IP='\(exitIP)'
 
             # SNAT-очистка: прежние подсети читаем из состояния, чтобы после исключения
@@ -240,7 +297,7 @@ public enum ProxyEgressRules {
               OLD_SUBNETS=$(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' '\(ProxiesState.path)' | tr '\\n' ' ')
             fi
             for s in $OLD_SUBNETS; do
-              while iptables -t nat -D POSTROUTING -s "$s" -o awg-relay -j MASQUERADE 2>/dev/null; do :; done
+              while iptables -t nat -D POSTROUTING -s "$s" -o \(ConfigureC1.relayInterface) -j MASQUERADE 2>/dev/null; do :; done
             done
 
             # Идемпотентность: повторное применение удаляет прежние вставки, не дублируя их.
@@ -307,7 +364,7 @@ public enum ProxyEgressRules {
               OLD_SUBNETS=$(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$STATE" | tr '\\n' ' ')
             fi
             for s in $OLD_SUBNETS; do
-              ip route del "$s" dev awg-relay 2>/dev/null || true
+              ip route del "$s" dev \(ConfigureC1.relayInterface) 2>/dev/null || true
               while iptables -t nat -D POSTROUTING -s "$s" -o "$WAN" -j MASQUERADE 2>/dev/null; do :; done
             done
 

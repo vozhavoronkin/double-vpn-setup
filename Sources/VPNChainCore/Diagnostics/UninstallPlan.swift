@@ -129,12 +129,13 @@ public enum UninstallPlan {
             subnets.append("'\(clientSubnet)'")
         }
         subnets.append("'10.99.0.0/24'")
-        // Удаление по номеру правила: MASQUERADE создаётся с `-o <WAN>`, и точное
-        // совпадение спецификации при удалении без знания WAN невозможно.
+        // Точное совпадение токена подсети в `iptables -S`: подстрочный поиск удалил бы
+        // чужое правило (10.0.0.0/16 ⊂ 110.0.0.0/16). Правила Docker (`! -o …`)
+        // пропускаются: удаляются только MASQUERADE режима с явным `-o <WAN>`.
         let natRemoval = """
             for s in \(subnets.joined(separator: " ")); do
-              while n=$(iptables -t nat -L POSTROUTING --line-numbers -n | awk -v s="$s" '/MASQUERADE/ && index($0, s) {print $1; exit}'); [ -n "$n" ]; do
-                iptables -t nat -D POSTROUTING "$n" 2>/dev/null || break
+              iptables -t nat -S POSTROUTING | awk -v s="$s" 'index($0, " -s " s " ") && index($0, " -o ") && !index($0, "! -o ") { sub(/^-A POSTROUTING /, ""); print }' | while read -r rule; do
+                iptables -t nat -D POSTROUTING $rule 2>/dev/null || true
               done
             done
             """
@@ -161,8 +162,10 @@ public enum UninstallPlan {
                     if [ -f '/etc/amnezia/chain/proxies.json' ]; then
                       for s in $(sed -n 's/.*"subnet"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' '/etc/amnezia/chain/proxies.json'); do
                         ip route del "$s" dev awg-relay 2>/dev/null || true
-                        while n=$(iptables -t nat -L POSTROUTING --line-numbers -n | awk -v s="$s" '/MASQUERADE/ && index($0, s) {print $1; exit}'); [ -n "$n" ]; do
-                          iptables -t nat -D POSTROUTING "$n" 2>/dev/null || break
+                        # Удаляем только свои правила: точное совпадение токена подсети
+                        # (не подстрока) и наличие -o без «! -o» (правила Docker не трогаем).
+                        iptables -t nat -S POSTROUTING | awk -v s="$s" 'index($0, " -s " s " ") && index($0, " -o ") && !index($0, "! -o ") { sub(/^-A POSTROUTING /, ""); print }' | while read -r rule; do
+                          iptables -t nat -D POSTROUTING $rule 2>/dev/null || true
                         done
                       done
                     fi

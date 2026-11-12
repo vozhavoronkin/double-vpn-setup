@@ -29,7 +29,7 @@ open VPNChainSetup.xcodeproj
 xcodebuild -project VPNChainSetup.xcodeproj -scheme VPNChainSetup \
   -destination 'platform=macOS' build
 
-swift test                 # 146 unit-тестов core-модуля
+swift test                 # 178 unit-тестов core-модуля
 ```
 
 ## Установка из релиза
@@ -93,7 +93,7 @@ swift test                 # 146 unit-тестов core-модуля
 ```
 Sources/VPNChainCore/     # логика: SSH, provisioning, диагностика, секреты, хранение
 Sources/VPNChainSetup/    # приложение: MVVM, экраны (подключения/установка/статус/диагностика/клиент/прокси)
-Tests/VPNChainCoreTests/  # 176 unit-тестов
+Tests/VPNChainCoreTests/  # 178 unit-тестов
 openspec/                 # спецификации и архив изменений
 resources/                # ТЗ
 ```

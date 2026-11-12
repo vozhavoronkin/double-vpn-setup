@@ -451,9 +451,11 @@ public final class ProvisioningEngine: @unchecked Sendable {
 
     // MARK: Режим проксирования исходящего трафика (proxy-egress)
 
-    /// Применение режима «Прокси»: сначала сервер-выход (маршруты и NAT), затем
-    /// сервер-вход (маркировка). При ошибке на входе выполняется откат к предыдущему
-    /// состоянию — выключено, чтобы не оставить трафик без обратной дороги.
+    /// Применение режима «Прокси»: сначала сервер-выход (очистка следов прежней схемы
+    /// и состояние), затем сервер-вход (маркировка, SNAT, IPv6). При ошибке на входе
+    /// выполняется откат к выключенному состоянию. При ошибке на выходе состояние входа
+    /// не тронуто (маркировки ещё нет), поэтому достаточно попытки повторной очистки
+    /// выхода — она фиксируется в журнале, но не маскирует исходную ошибку.
     @discardableResult
     public func applyProxyEgress(
         settings: ProxyEgressSettings,
@@ -466,6 +468,10 @@ public final class ProvisioningEngine: @unchecked Sendable {
         let networks = ProxyEgressRules.selectedNetworks(
             all: allNetworks, settings: settings, amneziaNetworks: amneziaNetworks)
         let enabled = settings.enabled
+        if enabled {
+            try ProxyEgressRules.validate(
+                networks: networks, exitIP: exitIP, wanInterface: wanInterface)
+        }
 
         emit("proxy-exit", .running, nil)
         do {
@@ -479,6 +485,13 @@ public final class ProvisioningEngine: @unchecked Sendable {
                 enabled ? "сервер-выход чист (SNAT — на входе)" : "правила сняты")
         } catch {
             emit("proxy-exit", .failed, "\(error)")
+            // Повторная очистка выхода: вход не тронут, но состояние выхода могло
+            // остаться частично изменённым.
+            for action in ProxyEgressRules.exitActions(
+                enabled: false, networks: [], wanInterface: wanInterface, exitIP: "")
+            {
+                _ = try? await apply(action, on: c2, role: .exit)
+            }
             throw error
         }
 

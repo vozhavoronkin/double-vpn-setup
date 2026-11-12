@@ -306,6 +306,40 @@ struct ProxyEgressTests {
         #expect(!script.contains("ip6tables -D PREROUTING"))
     }
 
+    @Test func validationRejectsValuesThatReachShell() throws {
+        // Валидные значения проходят.
+        try ProxyEgressRules.validate(
+            networks: networks, exitIP: "203.0.113.9", wanInterface: "eth0")
+
+        // Подсеть, bridge, IP и интерфейс — только безопасные форматы.
+        #expect(!ProxyEgressRules.isValidSubnet("172.18.0.0/33"))
+        #expect(!ProxyEgressRules.isValidSubnet("172.18.0.0/16; rm -rf /"))
+        #expect(!ProxyEgressRules.isValidIPv4("203.0.113"))
+        #expect(!ProxyEgressRules.isValidInterface("br-aa; reboot"))
+        #expect(!ProxyEgressRules.isValidInterface("very-long-interface-name"))
+
+        let badNetwork = [
+            ProxyNetwork(name: "evil", subnet: "172.18.0.0/16; reboot", bridge: "br-aaaaaaaaaaaa")
+        ]
+        #expect(throws: ProvisioningError.self) {
+            try ProxyEgressRules.validate(
+                networks: badNetwork, exitIP: "203.0.113.9", wanInterface: "eth0")
+        }
+        #expect(throws: ProvisioningError.self) {
+            try ProxyEgressRules.validate(
+                networks: networks, exitIP: "not-an-ip", wanInterface: "eth0")
+        }
+    }
+
+    @Test func dockerCommandsAreShellQuotedAndNamesValidated() {
+        #expect(ProxyNetworkDetector.shellQuote("3x-ui") == "'3x-ui'")
+        #expect(ProxyNetworkDetector.shellQuote("a'b") == "'a'\\''b'")
+        #expect(ProxyNetworkDetector.isValidObjectName("amnezia-awg2"))
+        #expect(ProxyNetworkDetector.isValidObjectName("my_net.1:2"))
+        #expect(!ProxyNetworkDetector.isValidObjectName("name; reboot"))
+        #expect(!ProxyNetworkDetector.isValidObjectName("with space"))
+    }
+
     @Test func entryActionsUseManagedScriptAndUnit() throws {
         let actions = ProxyEgressRules.entryActions(
             enabled: true, networks: networks, exitIP: "203.0.113.9", clientPort: "51820")
@@ -548,5 +582,10 @@ struct ProxyEgressTests {
         #expect(!joined.contains("docker rm"))
         #expect(!joined.contains("amnezia-awg"))
         #expect(!joined.contains("iptables -P INPUT DROP"))
+        // NAT на выходе удаляется по точному токену подсети, а не подстрокой:
+        // иначе 10.0.0.0/16 совпало бы с 110.0.0.0/16.
+        #expect(!joined.contains("index($0, s)"))
+        #expect(joined.contains("index($0, \" -s \" s \" \")"))
+        #expect(joined.contains("!index($0, \"! -o \")"))
     }
 }

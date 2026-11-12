@@ -26,22 +26,35 @@ public struct ProxyNetworkDetector: Sendable {
     public static let listNetworksCommand = "docker network ls --format '{{.Name}}'"
 
     public static func networkInspectCommand(network: String) -> String {
-        "docker network inspect -f '{{json .}}' \(network)"
+        "docker network inspect -f '{{json .}}' \(shellQuote(network))"
     }
 
     public static func containerNetworkNamesCommand(container: String) -> String {
-        "docker inspect -f '{{json .NetworkSettings.Networks}}' \(container)"
+        "docker inspect -f '{{json .NetworkSettings.Networks}}' \(shellQuote(container))"
     }
 
     /// Публичный IP: первый доступный сервис; IPv4 обязателен (туннель IPv4-only).
     public static let publicIPCommand =
         "curl -4fsS --max-time 10 https://api.ipify.org 2>/dev/null || curl -4fsS --max-time 10 https://ifconfig.me/ip 2>/dev/null"
 
-    public static let hostEgressCommand = publicIPCommand
-
     /// Фактический IP из контейнера: curl, при его отсутствии — wget.
     public static func containerEgressCommand(container: String) -> String {
-        "docker exec \(container) sh -c 'curl -4fsS --max-time 10 https://api.ipify.org 2>/dev/null || wget -qO- -T 10 https://api.ipify.org 2>/dev/null'"
+        "docker exec \(shellQuote(container)) sh -c 'curl -4fsS --max-time 10 https://api.ipify.org 2>/dev/null || wget -qO- -T 10 https://api.ipify.org 2>/dev/null'"
+    }
+
+    /// Одиночные кавычки для безопасной подстановки значения в shell-команду.
+    /// Имена приходят из конфигурации/`docker inspect`, поэтому экранируются всегда.
+    public static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Имя Docker-сети/контейнера: буквы, цифры, `_`, `.`, `-`, `:` (без пробелов и кавычек).
+    public static func isValidObjectName(_ value: String) -> Bool {
+        !value.isEmpty
+            && value.count <= 128
+            && value.allSatisfy {
+                $0.isASCII && ($0.isLetter || $0.isNumber || "_.-:".contains($0))
+            }
     }
 
     // MARK: Парсеры (чистые функции для unit-тестов)
@@ -124,7 +137,7 @@ public struct ProxyNetworkDetector: Sendable {
 
         var networks: [ProxyNetwork] = []
         for name in Self.parseNetworkNames(namesResult.stdout) {
-            guard !Self.isServiceNetwork(name) else { continue }
+            guard !Self.isServiceNetwork(name), Self.isValidObjectName(name) else { continue }
             guard
                 let inspect = try? await runner.run(
                     Self.networkInspectCommand(network: name), timeout: 15, onOutput: nil),
@@ -138,7 +151,7 @@ public struct ProxyNetworkDetector: Sendable {
         }
 
         var amneziaNetworks: Set<String> = []
-        if let amneziaContainer, !amneziaContainer.isEmpty,
+        if let amneziaContainer, Self.isValidObjectName(amneziaContainer),
             let containerResult = try? await runner.run(
                 Self.containerNetworkNamesCommand(container: amneziaContainer), timeout: 15,
                 onOutput: nil), containerResult.succeeded
