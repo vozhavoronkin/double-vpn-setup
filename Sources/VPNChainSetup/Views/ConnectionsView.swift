@@ -1,9 +1,10 @@
+import AppKit
 import SwiftUI
 import VPNChainCore
 
-/// Экран «Подключения» (задача 2.5): профили С1 и С2.
-/// Вёрстка на Grid: подписи выровнены по правому краю и прижаты к полям,
-/// порт SSH — в свёрнутом блоке «Дополнительно» (по умолчанию 22).
+/// Экран «Подключения» (задача 2.5): два профиля — «Сервер-вход» и «Сервер-выход».
+/// Карточки идут адаптивной сеткой: две колонки на широком окне, одна на узком.
+/// Порт SSH — в свёрнутом блоке «Дополнительно» (по умолчанию 22).
 struct ConnectionsView: View {
     @StateObject private var viewModel: ConnectionsViewModel
 
@@ -12,14 +13,15 @@ struct ConnectionsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        PageScaffold {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 360), spacing: AppTheme.sectionSpacing)],
+                alignment: .leading,
+                spacing: AppTheme.sectionSpacing
+            ) {
                 ProfileSectionView(role: .entry, viewModel: viewModel)
                 ProfileSectionView(role: .exit, viewModel: viewModel)
             }
-            .frame(maxWidth: 560, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
         }
         .navigationTitle("Подключения")
     }
@@ -29,6 +31,7 @@ private struct ProfileSectionView: View {
     let role: ServerRole
     @ObservedObject var viewModel: ConnectionsViewModel
     @State private var advancedExpanded = false
+    @State private var saveError: String?
 
     private var sectionTitle: String {
         role == .entry ? "Сервер-вход" : "Сервер-выход"
@@ -55,90 +58,93 @@ private struct ProfileSectionView: View {
         )
     }
 
-    var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    Image(systemName: sectionIcon)
-                        .font(.title2)
-                        .foregroundStyle(sectionTint)
-                        .frame(width: 26)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(sectionTitle).font(.headline)
-                        Text(sectionSubtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                mainGrid
-                Divider()
-                DisclosureGroup("Дополнительно", isExpanded: $advancedExpanded) {
-                    advancedGrid
-                        .padding(.top, 8)
-                }
-                .font(.body)
-                buttonsRow
-                statusView
-            }
-            .padding(12)
+    private var isChecking: Bool {
+        viewModel.status(for: role) == .running
+    }
+
+    /// Пилюля профиля: проверка важнее факта сохранения.
+    private var pill: (kind: StatusKind, text: String) {
+        switch viewModel.status(for: role) {
+        case .running:
+            (.progress, "Проверяю")
+        case .success:
+            (.ok, "Проверен")
+        case .failure:
+            (.error, "Ошибка")
+        case .idle:
+            (.neutral, viewModel.isConfigured(role) ? "Настроен" : "Не настроен")
         }
     }
 
-    // MARK: Основная сетка полей
-
-    private var mainGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-            GridRow {
-                Text("Хост")
-                TextField("vpn.example.com", text: form.host)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
+    var body: some View {
+        Card(
+            title: sectionTitle,
+            systemImage: sectionIcon,
+            subtitle: sectionSubtitle,
+            tint: sectionTint,
+            accessory: { StatusPill(kind: pill.kind, text: pill.text) }
+        ) {
+            mainFields
+            Divider()
+            DisclosureGroup("Дополнительно", isExpanded: $advancedExpanded) {
+                portField.padding(.top, 6)
             }
-            GridRow {
-                Text("Пользователь")
-                TextField("root", text: form.user)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
-            }
-            GridRow {
-                Text("Аутентификация")
-                VStack(alignment: .leading, spacing: 6) {
-                    Picker("", selection: form.authKind) {
-                        Text("Пароль").tag(ConnectionProfile.AuthKind.password)
-                        Text("Ключ").tag(ConnectionProfile.AuthKind.key)
-                    }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                }
-            }
-            authSpecificRows
+            .font(.callout)
+            feedback
+            actions
         }
-        .gridColumnAlignment(.trailing) // подписи прижаты к полям
+    }
+
+    // MARK: Поля
+
+    private var mainFields: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LabeledField("Хост") {
+                TextField("", text: form.host)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(runCheck)
+                    .accessibilityLabel("Хост сервера")
+            }
+            LabeledField("Пользователь") {
+                TextField("", text: form.user)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(runCheck)
+                    .accessibilityLabel("Пользователь SSH")
+            }
+            LabeledField("Аутентификация") {
+                Picker("Аутентификация", selection: form.authKind) {
+                    Text("Пароль").tag(ConnectionProfile.AuthKind.password)
+                    Text("Ключ").tag(ConnectionProfile.AuthKind.key)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel("Способ аутентификации")
+            }
+            authSpecificFields
+        }
     }
 
     @ViewBuilder
-    private var authSpecificRows: some View {
+    private var authSpecificFields: some View {
         switch form.wrappedValue.authKind {
         case .password:
-            GridRow {
-                Text("Пароль")
+            LabeledField("Пароль") {
                 HStack(spacing: 8) {
-                    SecureField("пароль", text: form.password)
+                    SecureField("", text: form.password)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 280)
+                        .onSubmit(runCheck)
+                        .accessibilityLabel("Пароль SSH")
                     if form.wrappedValue.passwordSaved {
                         savedBadge("сохранён")
                     }
                 }
             }
         case .key:
-            GridRow {
-                Text("Файл ключа")
+            LabeledField("Файл ключа") {
                 HStack(spacing: 8) {
-                    TextField("~/.ssh/id_ed25519", text: form.keyPath)
+                    TextField("", text: form.keyPath)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 220)
+                        .accessibilityLabel("Путь к файлу ключа")
                     Button("Выбрать…") {
                         if let path = Self.pickKeyFile() {
                             form.wrappedValue.keyPath = path
@@ -146,17 +152,15 @@ private struct ProfileSectionView: View {
                     }
                 }
             }
-            GridRow {
-                Text("")
-                Toggle("Ключ с парольной фразой", isOn: form.keyHasPassphrase)
-            }
+            Toggle("Ключ с парольной фразой", isOn: form.keyHasPassphrase)
+                .toggleStyle(.checkbox)
             if form.wrappedValue.keyHasPassphrase {
-                GridRow {
-                    Text("Фраза")
+                LabeledField("Парольная фраза") {
                     HStack(spacing: 8) {
-                        SecureField("парольная фраза", text: form.passphrase)
+                        SecureField("", text: form.passphrase)
                             .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 280)
+                            .onSubmit(runCheck)
+                            .accessibilityLabel("Парольная фраза ключа")
                         if form.wrappedValue.passphraseSaved {
                             savedBadge("сохранена")
                         }
@@ -166,63 +170,73 @@ private struct ProfileSectionView: View {
         }
     }
 
-    // MARK: Дополнительно (скрываемый блок)
-
-    private var advancedGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-            GridRow {
-                Text("Порт SSH")
-                HStack(spacing: 8) {
-                    TextField("22", text: form.port)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 90)
-                    Text("по умолчанию 22")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+    private var portField: some View {
+        LabeledField("Порт SSH") {
+            HStack(spacing: 8) {
+                TextField("", text: form.port)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 90)
+                    .accessibilityLabel("Порт SSH")
+                Text("по умолчанию 22")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
-        .gridColumnAlignment(.trailing)
     }
 
-    // MARK: Кнопки и статус
-
-    private var buttonsRow: some View {
-        HStack(spacing: 10) {
-            Button("Сохранить") {
-                _ = viewModel.save(role)
-            }
-            Button("Проверить соединение") {
-                viewModel.check(role)
-            }
-            .disabled(viewModel.statuses[role] == .running)
-        }
-    }
+    // MARK: Обратная связь
 
     @ViewBuilder
-    private var statusView: some View {
-        switch viewModel.statuses[role] ?? .idle {
+    private var feedback: some View {
+        if let saveError {
+            Banner(kind: .error, text: saveError)
+        }
+        switch viewModel.status(for: role) {
         case .idle:
             EmptyView()
         case .running:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Проверяю соединение…").foregroundStyle(.secondary)
+                Text("Проверяю соединение…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         case .success(let text):
-            Label(text, systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Banner(kind: .success, text: text)
         case .failure(let text):
-            Label(text, systemImage: "xmark.octagon.fill")
-                .foregroundStyle(.red)
+            Banner(kind: .error, text: text)
         }
     }
 
+    private var actions: some View {
+        HStack(spacing: 10) {
+            Spacer(minLength: 0)
+            Button("Сохранить", action: save)
+            Button("Проверить соединение", action: runCheck)
+                .buttonStyle(.borderedProminent)
+                .disabled(isChecking)
+        }
+    }
+
+    private func save() {
+        saveError = viewModel.save(role)
+        if saveError == nil {
+            AppServices.shared.commands.noteProfilesChanged()
+        }
+    }
+
+    private func runCheck() {
+        saveError = nil
+        viewModel.check(role)
+        AppServices.shared.commands.noteProfilesChanged()
+    }
+
     private func savedBadge(_ text: String) -> some View {
-        Label(text, systemImage: "checkmark.circle.fill")
+        Label(text, systemImage: "checkmark.seal.fill")
             .font(.caption)
             .foregroundStyle(.secondary)
             .help("Секрет уже сохранён в Keychain; введите новый, чтобы заменить")
+            .accessibilityLabel("Секрет \(text) в Keychain")
     }
 
     /// Диалог выбора файла ключа (AppKit).

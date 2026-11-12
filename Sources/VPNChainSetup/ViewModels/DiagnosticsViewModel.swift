@@ -19,6 +19,16 @@ final class DiagnosticsViewModel: ObservableObject {
         self.store = store
     }
 
+    /// Сколько проверок пройдено (для сводки результатов).
+    var passedCount: Int {
+        checkResults.filter(\.passed).count
+    }
+
+    /// Всего проверок, по которым есть результат.
+    var totalCount: Int {
+        checkResults.count
+    }
+
     /// Чтение окружения С1 (может отсутствовать).
     private func readEnvironment(on c1: any RemoteRunner) async -> ChainState.Environment? {
         guard let result = try? await c1.run(StatusParsers.environmentCommand, timeout: 30, onOutput: nil),
@@ -34,7 +44,6 @@ final class DiagnosticsViewModel: ObservableObject {
         diagnosing = true
         errorText = nil
         checkResults = []
-        let exitHost = store.profile(for: .exit)?.host
         let store = self.store
         Task {
             defer { Task { @MainActor [weak self] in self?.diagnosing = false } }

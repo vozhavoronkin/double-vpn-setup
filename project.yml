@@ -30,6 +30,9 @@ targets:
       - path: Sources/VPNChainSetup
     dependencies:
       - package: VPNChainCore
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Sources/VPNChainSetup/Info.plist
       properties:

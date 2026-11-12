@@ -42,7 +42,12 @@ openspec validate macos-vpn-chain-setup-app --strict
     профили в UserDefaults, секреты в Keychain.
   - `Logging/` — санитизация логов (секреты не попадают в вывод).
 - `Sources/VPNChainSetup/` — MVVM: `ViewModels/` + `Views/` (экраны подключений, установки,
-  статуса, диагностики, клиента), `Services/AppServices.swift` — сборка зависимостей.
+  статуса, диагностики, клиента), `Views/DesignSystem.swift` — карточки, статус-пилюли,
+  строки метрик, баннеры, empty state и токены отступов, `Services/AppServices.swift` — сборка
+  зависимостей и `AppCommandRouter` для меню-команд (⌘R / ⌘↩ / ⌘D).
+- `Sources/VPNChainSetup/Resources/Assets.xcassets` — иконка приложения (`AppIcon`), собирается
+  через `ASSETCATALOG_COMPILER_APPICON_NAME` в `project.yml`; исходник рисуется
+  `scripts/make-app-icon.swift` (детерминированно, без сетевых зависимостей), затем нарезается `sips`.
 
 ## Правила домена (важные, легко сломать)
 

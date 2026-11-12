@@ -5,131 +5,233 @@ import VPNChainCore
 /// итоговая сводка с подсказкой про UDP 51828 у провайдера.
 struct InstallView: View {
     @StateObject private var viewModel: InstallViewModel
+    @ObservedObject private var router = AppServices.shared.commands
 
     init(store: ProfileStore = AppServices.shared.profiles) {
         _viewModel = StateObject(wrappedValue: InstallViewModel(store: store))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-            stepsList
+        PageScaffold {
+            headerCard
+            stepsCard
             if let summary = viewModel.summary {
-                summaryBox(summary)
+                summaryCard(summary)
             }
             if let error = viewModel.errorText {
-                Label(error, systemImage: "xmark.octagon.fill")
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: 560, alignment: .leading)
+                Banner(kind: .error, text: error)
             }
-            logPane
+            logCard
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Установка")
-    }
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                if let entry = AppServices.shared.profiles.profile(for: .entry) {
-                    Label("Сервер-вход: \(entry.host)\(entry.port == 22 ? "" : ":\(entry.port)")", systemImage: "arrow.right.to.line")
-                        .font(.callout)
-                        .foregroundStyle(.blue)
-                }
-                if let exit = AppServices.shared.profiles.profile(for: .exit) {
-                    Label("Сервер-выход: \(exit.host)\(exit.port == 22 ? "" : ":\(exit.port)")", systemImage: "globe")
-                        .font(.callout)
-                        .foregroundStyle(.green)
-                }
-                if let hint = viewModel.readinessHint {
-                    Text(hint).font(.callout).foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            Button(viewModel.running ? "Идёт установка…" : "Начать установку") {
-                viewModel.start()
-            }
-            .disabled(!viewModel.canStart)
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+        .onAppear(perform: consumeCommand)
+        .onChange(of: router.pendingToken) { _ in
+            consumeCommand()
         }
-        .frame(maxWidth: 720, alignment: .leading)
     }
 
-    private var stepsList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(viewModel.steps) { step in
-                HStack(alignment: .top, spacing: 10) {
-                    stepIcon(state: step.state)
-                        .frame(width: 20)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(step.title)
-                            .font(.body)
-                        if let detail = step.detail, step.state == .done || step.state == .failed || step.state == .skipped {
-                            Text(detail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if step.state == .running {
-                        ProgressView().controlSize(.small)
-                    }
+    /// Команда меню «Начать установку» (⌘↩).
+    private func consumeCommand() {
+        guard router.pending == .startInstall else { return }
+        router.consume(.startInstall)
+        viewModel.start()
+    }
+
+    // MARK: Шапка
+
+    private var headerCard: some View {
+        Card(
+            title: "Развёртывание цепочки",
+            systemImage: "arrow.down.circle",
+            subtitle: "Порядок шагов: сначала сервер-выход, затем сервер-вход и проверка handshake",
+            accessory: {
+                if viewModel.running {
+                    StatusPill(kind: .progress, text: "Идёт установка")
                 }
+            }
+        ) {
+            HStack(alignment: .center, spacing: 10) {
+                serverChip(.entry)
+                serverChip(.exit)
+                Spacer(minLength: 8)
+                Button(viewModel.running ? "Идёт установка…" : "Начать установку") {
+                    viewModel.start()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.canStart)
+                .keyboardShortcut(.defaultAction)
+                .help("Начать установку (⌘↩)")
+            }
+            if let hint = viewModel.readinessHint {
+                Banner(kind: .info, text: hint)
             }
         }
-        .frame(maxWidth: 720, alignment: .leading)
-        .padding(12)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    @ViewBuilder
+    private func serverChip(_ role: ServerRole) -> some View {
+        let profile = AppServices.shared.profiles.profile(for: role)
+        let address = profile.map { "\($0.host)\($0.port == 22 ? "" : ":\($0.port)")" }
+        return HStack(spacing: 8) {
+            Image(systemName: role == .entry ? "arrow.right.to.line" : "globe")
+                .foregroundStyle(role == .entry ? .blue : .green)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(role == .entry ? "Сервер-вход" : "Сервер-выход")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(address ?? "не настроен")
+                    .font(.callout)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Color.primary.opacity(0.05),
+            in: RoundedRectangle(cornerRadius: AppTheme.smallRadius, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Шаги
+
+    private var stepsCard: some View {
+        Card(
+            title: "Шаги установки",
+            systemImage: "list.number",
+            accessory: {
+                StatusPill(kind: stepsKind, text: viewModel.progressTitle)
+            }
+        ) {
+            ProgressView(value: viewModel.progressFraction)
+                .progressViewStyle(.linear)
+                .accessibilityLabel("Прогресс установки")
+                .accessibilityValue(viewModel.progressTitle)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(viewModel.steps.enumerated()), id: \.element.id) { index, step in
+                    stepRow(step, isLast: index == viewModel.steps.count - 1)
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var stepsKind: StatusKind {
+        if viewModel.running { return .progress }
+        if viewModel.steps.contains(where: { $0.state == .failed }) { return .error }
+        if viewModel.completedCount == viewModel.steps.count, !viewModel.steps.isEmpty { return .ok }
+        return .neutral
+    }
+
+    private func stepRow(_ step: InstallViewModel.StepRow, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(spacing: 0) {
+                stepIcon(state: step.state)
+                    .frame(width: 20, height: 20)
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor))
+                    .frame(width: 1)
+                    .frame(maxHeight: .infinity)
+                    .padding(.top, 2)
+                    .opacity(isLast ? 0 : 1)
+                    .accessibilityHidden(true)
+            }
+            .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.title)
+                    .font(.callout)
+                    .foregroundStyle(step.state == .pending ? .secondary : .primary)
+                if let detail = step.detail,
+                   step.state == .done || step.state == .failed || step.state == .skipped {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.bottom, 12)
+
+            Spacer(minLength: 8)
+            if step.state == .running {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     private func stepIcon(state: StepProgress.State) -> some View {
-        switch state {
-        case .pending:
-            Image(systemName: "circle").foregroundStyle(.secondary)
-        case .running:
-            Image(systemName: "arrow.down.circle").foregroundStyle(.blue)
-        case .done:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        case .failed:
-            Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
-        case .skipped:
-            Image(systemName: "minus.circle").foregroundStyle(.secondary)
+        let kind: StatusKind = switch state {
+        case .pending: .neutral
+        case .running: .progress
+        case .done: .ok
+        case .failed: .error
+        case .skipped: .neutral
         }
+        let symbol = switch state {
+        case .pending: "circle.dashed"
+        case .running: "arrow.triangle.2.circlepath"
+        case .done: "checkmark.circle.fill"
+        case .failed: "xmark.octagon.fill"
+        case .skipped: "minus.circle"
+        }
+        return Image(systemName: symbol)
+            .font(.callout)
+            .foregroundStyle(kind.tint)
     }
 
-    private func summaryBox(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Сводка", systemImage: "checkmark.seal.fill")
-                .font(.headline)
-                .foregroundStyle(.green)
+    // MARK: Сводка и журнал
+
+    private func summaryCard(_ text: String) -> some View {
+        Card(title: "Сводка", systemImage: "checkmark.seal.fill", tint: .green) {
             Text(text)
                 .font(.callout)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: 720, alignment: .leading)
-        .padding(12)
-        .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private var logPane: some View {
-        GroupBox("Вывод команд") {
+    private var logCard: some View {
+        Card(
+            title: "Вывод команд",
+            systemImage: "terminal",
+            accessory: {
+                Button("Скопировать") {
+                    viewModel.copyLogToPasteboard()
+                }
+                .disabled(viewModel.logLines.isEmpty)
+                .help("Скопировать журнал в буфер обмена")
+            }
+        ) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(viewModel.logLines.joined(separator: "\n"))
-                        .font(.system(size: 11, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .textSelection(.enabled)
-                        .id("logBottom")
+                    Group {
+                        if viewModel.logLines.isEmpty {
+                            Text("Вывод появится после запуска установки")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(viewModel.logLines.joined(separator: "\n"))
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(8)
+                    .id("logBottom")
                 }
                 .frame(minHeight: 160, maxHeight: 260)
+                .background(
+                    Color(nsColor: .textBackgroundColor),
+                    in: RoundedRectangle(cornerRadius: AppTheme.smallRadius, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.smallRadius, style: .continuous)
+                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+                )
                 .onChange(of: viewModel.logLines.count) { _ in
                     proxy.scrollTo("logBottom", anchor: .bottom)
                 }
             }
         }
-        .frame(maxWidth: 720, alignment: .leading)
     }
 }
