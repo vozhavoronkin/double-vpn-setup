@@ -74,7 +74,8 @@ final class InstallViewModel: ObservableObject {
     }
 
     func start() {
-        guard canStart, let entry = store.profile(for: .entry), let exit = store.profile(for: .exit) else { return }
+        guard canStart, let entry = store.profile(for: .entry), let exit = store.profile(for: .exit)
+        else { return }
         running = true
         summary = nil
         errorText = nil
@@ -95,7 +96,12 @@ final class InstallViewModel: ObservableObject {
                 let c2 = SSHClient(options: c2Options)
                 try await c1.connect()
                 try await c2.connect()
-                defer { Task { await c1.close(); await c2.close() } }
+                defer {
+                    Task {
+                        await c1.close()
+                        await c2.close()
+                    }
+                }
 
                 let input = try ProvisioningInput.fresh(s2Address: exit.host)
                 let engine = ProvisioningEngine(
@@ -157,7 +163,9 @@ final class InstallViewModel: ObservableObject {
         }
     }
 
-    private static func summaryText(environment: ChainState.Environment, s2Address: String) -> String {
+    private static func summaryText(environment: ChainState.Environment, s2Address: String)
+        -> String
+    {
         """
         Цепочка развёрнута.
 

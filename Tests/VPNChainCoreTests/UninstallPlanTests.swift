@@ -1,19 +1,23 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Тесты задачи 6.4: план uninstall против инвентаря установки.
 struct UninstallPlanTests {
     private func joinedCommands() -> String {
         let entry = UninstallPlan.entryCommands()
-        let exit = UninstallPlan.exitCommands(dockerSubnet: "172.26.0.0/16", clientSubnet: "10.8.1.0/24")
+        let exit = UninstallPlan.exitCommands(
+            dockerSubnet: "172.26.0.0/16", clientSubnet: "10.8.1.0/24")
         return (entry + exit).map { $0.command }.joined(separator: "\n")
     }
 
     @Test func inventoryFullyCoveredByCommands() {
         let joined = joinedCommands()
         for artifact in UninstallPlan.inventory {
-            #expect(joined.contains(artifact), "инвентарный артефакт не покрыт uninstall'ом: \(artifact)")
+            #expect(
+                joined.contains(artifact),
+                "инвентарный артефакт не покрыт uninstall'ом: \(artifact)")
         }
     }
 
@@ -52,7 +56,8 @@ struct UninstallPlanTests {
     }
 
     @Test func exitCommandsRemoveNatForBothSubnets() {
-        let commands = UninstallPlan.exitCommands(dockerSubnet: "172.26.0.0/16", clientSubnet: "10.8.1.0/24")
+        let commands = UninstallPlan.exitCommands(
+            dockerSubnet: "172.26.0.0/16", clientSubnet: "10.8.1.0/24")
         let joined = commands.map { $0.command }.joined(separator: "\n")
         // Удаление всех MASQUERADE по подсетям (правила создаются с `-o <WAN>`,
         // поэтому удаляем по номеру правила).
@@ -73,7 +78,8 @@ struct UninstallPlanTests {
     }
 
     @Test func softwareRemovalIsSeparateAndExplicit() {
-        let joined = UninstallPlan.optionalSoftwareRemoval.map { $0.command }.joined(separator: "\n")
+        let joined = UninstallPlan.optionalSoftwareRemoval.map { $0.command }.joined(
+            separator: "\n")
         #expect(joined.contains("/usr/bin/awg"))
         #expect(joined.contains("/usr/bin/amneziawg-go"))
         #expect(joined.contains("/tmp/amneziawg-tools"))

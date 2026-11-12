@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Каркасный тест: проверяет работоспособность тестовой инфраструктуры.

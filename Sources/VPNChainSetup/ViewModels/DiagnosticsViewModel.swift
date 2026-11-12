@@ -31,8 +31,11 @@ final class DiagnosticsViewModel: ObservableObject {
 
     /// Чтение окружения С1 (может отсутствовать).
     private func readEnvironment(on c1: any RemoteRunner) async -> ChainState.Environment? {
-        guard let result = try? await c1.run(StatusParsers.environmentCommand, timeout: 30, onOutput: nil),
-              result.succeeded || !result.stdout.isEmpty else {
+        guard
+            let result = try? await c1.run(
+                StatusParsers.environmentCommand, timeout: 30, onOutput: nil),
+            result.succeeded || !result.stdout.isEmpty
+        else {
             return nil
         }
         return try? ChainStateParser.parseEnvironment(result.stdout)
@@ -49,19 +52,27 @@ final class DiagnosticsViewModel: ObservableObject {
             defer { Task { @MainActor [weak self] in self?.diagnosing = false } }
             do {
                 let checker = ConnectionChecker(store: store) { fingerprint in
-                    await ConnectionsViewModel.confirmFingerprint(host: "", fingerprint: fingerprint)
+                    await ConnectionsViewModel.confirmFingerprint(
+                        host: "", fingerprint: fingerprint)
                 }
-                guard let entry = store.profile(for: .entry), let exit = store.profile(for: .exit) else {
+                guard let entry = store.profile(for: .entry), let exit = store.profile(for: .exit)
+                else {
                     throw ConnectionChecker.CheckError.profileInvalid("настройте оба подключения")
                 }
                 let c1 = SSHClient(options: try checker.connectOptions(for: entry))
                 let c2 = SSHClient(options: try checker.connectOptions(for: exit))
                 try await c1.connect()
                 try await c2.connect()
-                defer { Task { await c1.close(); await c2.close() } }
+                defer {
+                    Task {
+                        await c1.close()
+                        await c2.close()
+                    }
+                }
 
                 let environment = await readEnvironment(on: c1)
-                let guide = Troubleshooting.guide(for: selectedSymptom, environment: environment, s2Address: exit.host)
+                let guide = Troubleshooting.guide(
+                    for: selectedSymptom, environment: environment, s2Address: exit.host)
                 self.guide = guide
                 self.checkResults = await ChecksEngine.runAll(guide.checks, entry: c1, exit: c2)
             } catch {
@@ -85,7 +96,8 @@ final class DiagnosticsViewModel: ObservableObject {
                 var environment: ChainState.Environment?
                 if role == .exit, let entry = store.profile(for: .entry) {
                     let checker = ConnectionChecker(store: store) { fingerprint in
-                        await ConnectionsViewModel.confirmFingerprint(host: "", fingerprint: fingerprint)
+                        await ConnectionsViewModel.confirmFingerprint(
+                            host: "", fingerprint: fingerprint)
                     }
                     let entryClient = try? SSHClient(options: checker.connectOptions(for: entry))
                     try? await entryClient?.connect()
@@ -95,12 +107,16 @@ final class DiagnosticsViewModel: ObservableObject {
                     }
                 }
 
-                guard let profile = role == .entry ? store.profile(for: .entry) : store.profile(for: .exit) else {
+                guard
+                    let profile = role == .entry
+                        ? store.profile(for: .entry) : store.profile(for: .exit)
+                else {
                     uninstallReport = "профиль сервера не настроен"
                     return
                 }
                 let checker = ConnectionChecker(store: store) { fingerprint in
-                    await ConnectionsViewModel.confirmFingerprint(host: "", fingerprint: fingerprint)
+                    await ConnectionsViewModel.confirmFingerprint(
+                        host: "", fingerprint: fingerprint)
                 }
                 let target = SSHClient(options: try checker.connectOptions(for: profile))
                 try await target.connect()
@@ -117,19 +133,22 @@ final class DiagnosticsViewModel: ObservableObject {
                 } else {
                     guard let dockerSubnet = effectiveEnvironment?.dockerSubnet else {
                         uninstallReport = """
-                        не удалось определить Docker-подсеть сервера-входа (нет связи с ним) — \
-                        повторите очистку позже; MASQUERADE удалите вручную
-                        """
+                            не удалось определить Docker-подсеть сервера-входа (нет связи с ним) — \
+                            повторите очистку позже; MASQUERADE удалите вручную
+                            """
                         return
                     }
-                    commands = UninstallPlan.exitCommands(dockerSubnet: dockerSubnet, clientSubnet: effectiveEnvironment?.clientSubnet)
+                    commands = UninstallPlan.exitCommands(
+                        dockerSubnet: dockerSubnet, clientSubnet: effectiveEnvironment?.clientSubnet
+                    )
                 }
 
                 var failed: [String] = []
                 for command in commands {
                     let result = try await target.run(command.command, timeout: 120, onOutput: nil)
                     if !result.succeeded {
-                        failed.append("\(command.title): код \(result.exitCode ?? -1) \(result.stderr)")
+                        failed.append(
+                            "\(command.title): код \(result.exitCode ?? -1) \(result.stderr)")
                     }
                 }
                 if alsoSoftware {
@@ -139,9 +158,12 @@ final class DiagnosticsViewModel: ObservableObject {
                 }
 
                 if failed.isEmpty {
-                    uninstallReport = "\(roleTitle): очистка завершена, маркеры и правила удалены. SSH и контейнер AmneziaVPN не затронуты."
+                    uninstallReport =
+                        "\(roleTitle): очистка завершена, маркеры и правила удалены. SSH и контейнер AmneziaVPN не затронуты."
                 } else {
-                    uninstallReport = "\(roleTitle): очистка завершена частично:\n" + failed.joined(separator: "\n")
+                    uninstallReport =
+                        "\(roleTitle): очистка завершена частично:\n"
+                        + failed.joined(separator: "\n")
                 }
             } catch {
                 uninstallReport = nil

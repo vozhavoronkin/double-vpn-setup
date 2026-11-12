@@ -44,7 +44,8 @@ public enum StatusParsers {
                 tx = parsed?.tx
             }
         }
-        return RelayStatus(interfaceUp: interfaceUp, handshakeSecondsAgo: handshake, rxBytes: rx, txBytes: tx)
+        return RelayStatus(
+            interfaceUp: interfaceUp, handshakeSecondsAgo: handshake, rxBytes: rx, txBytes: tx)
     }
 
     /// «47 seconds ago», «2 minutes, 3 seconds ago», «1 hour, 5 minutes ago», «3 days, 4 hours ago» → секунды.
@@ -74,10 +75,13 @@ public enum StatusParsers {
     /// «1.2 MiB received, 980 KiB sent» → (rx, tx) в байтах.
     public static func parseTransfer(_ text: String) -> (rx: Int64, tx: Int64)? {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        let parts = trimmed.components(separatedBy: "received,").map { $0.trimmingCharacters(in: .whitespaces) }
+        let parts = trimmed.components(separatedBy: "received,").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
         guard parts.count == 2 else { return nil }
         guard let rx = parseBytes(parts[0].replacingOccurrences(of: "received", with: "")),
-              let tx = parseBytes(parts[1].replacingOccurrences(of: "sent", with: "")) else {
+            let tx = parseBytes(parts[1].replacingOccurrences(of: "sent", with: ""))
+        else {
             return nil
         }
         return (rx, tx)
@@ -106,7 +110,9 @@ public enum StatusParsers {
     public static func parseIpRule(_ output: String) -> Bool {
         for line in output.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if (trimmed.contains("fwmark") || trimmed.contains("iif")), trimmed.contains("lookup 51821") {
+            if trimmed.contains("fwmark") || trimmed.contains("iif"),
+                trimmed.contains("lookup 51821")
+            {
                 return true
             }
         }
@@ -114,7 +120,8 @@ public enum StatusParsers {
     }
 
     /// Таблица 51821: default через awg-relay и blackhole kill-switch.
-    public static func parseRouteTable(_ output: String) -> (defaultViaRelay: Bool, blackhole: Bool) {
+    public static func parseRouteTable(_ output: String) -> (defaultViaRelay: Bool, blackhole: Bool)
+    {
         let hasRelay = output.contains("default dev awg-relay")
         let hasBlackhole = output.contains("blackhole default")
         return (defaultViaRelay: hasRelay, blackhole: hasBlackhole)
@@ -185,53 +192,80 @@ public struct StatusCollector: Sendable {
         self.environment = environment
     }
 
-    public func snapshot(c1: (any RemoteRunner)?, c2: any RemoteRunner) async -> ChainStatusSnapshot {
+    public func snapshot(c1: (any RemoteRunner)?, c2: any RemoteRunner) async -> ChainStatusSnapshot
+    {
         async let entryStatus: ServerAvailability<EntryServerStatus> = collectEntry(c1)
         async let exitStatus: ServerAvailability<ExitServerStatus> = collectExit(c2)
         return await ChainStatusSnapshot(entry: entryStatus, exit: exitStatus)
     }
 
-    private func collectEntry(_ runner: (any RemoteRunner)?) async -> ServerAvailability<EntryServerStatus> {
+    private func collectEntry(_ runner: (any RemoteRunner)?) async -> ServerAvailability<
+        EntryServerStatus
+    > {
         guard let runner else { return .unreachable(reason: "профиль сервера-входа не настроен") }
-        guard let relayResult = try? await runner.run(StatusParsers.awgShowCommand, timeout: 30, onOutput: nil) else {
+        guard
+            let relayResult = try? await runner.run(
+                StatusParsers.awgShowCommand, timeout: 30, onOutput: nil)
+        else {
             return .unreachable(reason: "SSH-соединение не установлено")
         }
         guard relayResult.succeeded else {
-            return .unreachable(reason: relayResult.stderr.isEmpty ? "сервер доступен, но awg show завершился ошибкой" : relayResult.stderr)
+            return .unreachable(
+                reason: relayResult.stderr.isEmpty
+                    ? "сервер доступен, но awg show завершился ошибкой" : relayResult.stderr)
         }
         var status = EntryServerStatus()
         status.relay = StatusParsers.parseRelayStatus(relayResult.stdout)
-        if let rule = try? await runner.run(StatusParsers.ipRuleCommand, timeout: 30, onOutput: nil) {
+        if let rule = try? await runner.run(StatusParsers.ipRuleCommand, timeout: 30, onOutput: nil)
+        {
             status.policyRulePresent = StatusParsers.parseIpRule(rule.stdout)
         }
-        if let route = try? await runner.run(StatusParsers.routeTableCommand, timeout: 30, onOutput: nil) {
+        if let route = try? await runner.run(
+            StatusParsers.routeTableCommand, timeout: 30, onOutput: nil)
+        {
             status.routeKillSwitch = StatusParsers.parseRouteTable(route.stdout)
         }
-        if let dockerUser = try? await runner.run(StatusParsers.dockerUserCommand, timeout: 30, onOutput: nil) {
+        if let dockerUser = try? await runner.run(
+            StatusParsers.dockerUserCommand, timeout: 30, onOutput: nil)
+        {
             status.dockerUserJump = StatusParsers.parseDockerUserJump(dockerUser.stdout)
         }
         if let containerName = environment?.containerName, !containerName.isEmpty,
-           let alive = try? await runner.run(StatusParsers.containerAliveCommand(container: containerName), timeout: 30, onOutput: nil) {
+            let alive = try? await runner.run(
+                StatusParsers.containerAliveCommand(container: containerName), timeout: 30,
+                onOutput: nil)
+        {
             status.containerAlive = alive.succeeded
         }
         return .available(status)
     }
 
-    private func collectExit(_ runner: any RemoteRunner) async -> ServerAvailability<ExitServerStatus> {
-        guard let relayResult = try? await runner.run(StatusParsers.awgShowCommand, timeout: 30, onOutput: nil) else {
+    private func collectExit(_ runner: any RemoteRunner) async -> ServerAvailability<
+        ExitServerStatus
+    > {
+        guard
+            let relayResult = try? await runner.run(
+                StatusParsers.awgShowCommand, timeout: 30, onOutput: nil)
+        else {
             return .unreachable(reason: "SSH-соединение не установлено")
         }
         guard relayResult.succeeded else {
-            return .unreachable(reason: relayResult.stderr.isEmpty ? "сервер доступен, но awg show завершился ошибкой" : relayResult.stderr)
+            return .unreachable(
+                reason: relayResult.stderr.isEmpty
+                    ? "сервер доступен, но awg show завершился ошибкой" : relayResult.stderr)
         }
         var status = ExitServerStatus()
         status.relay = StatusParsers.parseRelayStatus(relayResult.stdout)
-        if let listening = try? await runner.run(StatusParsers.listeningCommand, timeout: 30, onOutput: nil) {
+        if let listening = try? await runner.run(
+            StatusParsers.listeningCommand, timeout: 30, onOutput: nil)
+        {
             status.portListening = StatusParsers.parseListeningPort(listening.stdout)
         }
         if let subnet = environment?.dockerSubnet,
-           let nat = try? await runner.run(StatusParsers.natCommand, timeout: 30, onOutput: nil) {
-            status.masqueradeForDockerSubnet = StatusParsers.parseMasquerade(nat.stdout, subnet: subnet)
+            let nat = try? await runner.run(StatusParsers.natCommand, timeout: 30, onOutput: nil)
+        {
+            status.masqueradeForDockerSubnet = StatusParsers.parseMasquerade(
+                nat.stdout, subnet: subnet)
         }
         return .available(status)
     }

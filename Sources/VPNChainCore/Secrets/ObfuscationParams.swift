@@ -13,7 +13,8 @@ public struct ObfuscationParams: Sendable, Equatable, Codable {
     public let h3: Int
     public let h4: Int
 
-    public init(jc: Int, jmin: Int, jmax: Int, s1: Int, s2: Int, h1: Int, h2: Int, h3: Int, h4: Int) {
+    public init(jc: Int, jmin: Int, jmax: Int, s1: Int, s2: Int, h1: Int, h2: Int, h3: Int, h4: Int)
+    {
         self.jc = jc
         self.jmin = jmin
         self.jmax = jmax

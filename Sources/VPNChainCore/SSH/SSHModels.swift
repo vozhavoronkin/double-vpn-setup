@@ -18,7 +18,9 @@ public struct SSHKeyMaterial: Sendable {
     public let publicKeyOpenSSH: String?
     let privateKey: NIOSSHPrivateKey
 
-    init(algorithm: String, comment: String?, publicKeyOpenSSH: String?, privateKey: NIOSSHPrivateKey) {
+    init(
+        algorithm: String, comment: String?, publicKeyOpenSSH: String?, privateKey: NIOSSHPrivateKey
+    ) {
         self.algorithm = algorithm
         self.comment = comment
         self.publicKeyOpenSSH = publicKeyOpenSSH

@@ -40,44 +40,44 @@ public enum UninstallPlan {
                 id: "entry-stop",
                 title: "Остановка relay и юнитов",
                 command: """
-                awg-quick down awg-relay 2>/dev/null || true
-                systemctl disable --now awg-quick@awg-relay 2>/dev/null || true
-                systemctl disable --now vpn-chain.service 2>/dev/null || true
-                """
+                    awg-quick down awg-relay 2>/dev/null || true
+                    systemctl disable --now awg-quick@awg-relay 2>/dev/null || true
+                    systemctl disable --now vpn-chain.service 2>/dev/null || true
+                    """
             ),
             UninstallCommand(
                 id: "entry-routing",
                 title: "Удаление policy routing и kill-switch",
                 command: """
-                while ip rule del table 51821 2>/dev/null; do :; done
-                ip route flush table 51821 2>/dev/null || true
-                iptables -t nat -D POSTROUTING -o awg-relay -j RETURN 2>/dev/null || true
-                iptables -t mangle -C PREROUTING -j VPNCHAIN_MARK 2>/dev/null && iptables -t mangle -D PREROUTING -j VPNCHAIN_MARK 2>/dev/null || true
-                iptables -t mangle -F VPNCHAIN_MARK 2>/dev/null || true
-                iptables -t mangle -X VPNCHAIN_MARK 2>/dev/null || true
-                """
+                    while ip rule del table 51821 2>/dev/null; do :; done
+                    ip route flush table 51821 2>/dev/null || true
+                    iptables -t nat -D POSTROUTING -o awg-relay -j RETURN 2>/dev/null || true
+                    iptables -t mangle -C PREROUTING -j VPNCHAIN_MARK 2>/dev/null && iptables -t mangle -D PREROUTING -j VPNCHAIN_MARK 2>/dev/null || true
+                    iptables -t mangle -F VPNCHAIN_MARK 2>/dev/null || true
+                    iptables -t mangle -X VPNCHAIN_MARK 2>/dev/null || true
+                    """
             ),
             UninstallCommand(
                 id: "entry-firewall",
                 title: "Удаление цепочек VPNCHAIN/VPNCHAIN6",
                 command: """
-                iptables -C DOCKER-USER -j VPNCHAIN 2>/dev/null && iptables -D DOCKER-USER -j VPNCHAIN 2>/dev/null || true
-                iptables -F VPNCHAIN 2>/dev/null || true
-                iptables -X VPNCHAIN 2>/dev/null || true
-                ip6tables -C DOCKER-USER -j VPNCHAIN6 2>/dev/null && ip6tables -D DOCKER-USER -j VPNCHAIN6 2>/dev/null || true
-                ip6tables -F VPNCHAIN6 2>/dev/null || true
-                ip6tables -X VPNCHAIN6 2>/dev/null || true
-                """
+                    iptables -C DOCKER-USER -j VPNCHAIN 2>/dev/null && iptables -D DOCKER-USER -j VPNCHAIN 2>/dev/null || true
+                    iptables -F VPNCHAIN 2>/dev/null || true
+                    iptables -X VPNCHAIN 2>/dev/null || true
+                    ip6tables -C DOCKER-USER -j VPNCHAIN6 2>/dev/null && ip6tables -D DOCKER-USER -j VPNCHAIN6 2>/dev/null || true
+                    ip6tables -F VPNCHAIN6 2>/dev/null || true
+                    ip6tables -X VPNCHAIN6 2>/dev/null || true
+                    """
             ),
             UninstallCommand(
                 id: "entry-files",
                 title: "Удаление конфигов, скриптов, юнитов и persist-файла",
                 command: """
-                rm -f '/etc/amnezia/amneziawg/awg-relay.conf' '/etc/amnezia/amneziawg/awg-relay.conf.bak.'*
-                rm -f '/usr/local/bin/vpn-chain-rules.sh' '/etc/systemd/system/vpn-chain.service'
-                rm -f '/etc/sysctl.d/99-vpn-chain.conf' '/etc/sysctl.d/99-vpn-chain.conf.bak.'*
-                systemctl daemon-reload 2>/dev/null || true
-                """
+                    rm -f '/etc/amnezia/amneziawg/awg-relay.conf' '/etc/amnezia/amneziawg/awg-relay.conf.bak.'*
+                    rm -f '/usr/local/bin/vpn-chain-rules.sh' '/etc/systemd/system/vpn-chain.service'
+                    rm -f '/etc/sysctl.d/99-vpn-chain.conf' '/etc/sysctl.d/99-vpn-chain.conf.bak.'*
+                    systemctl daemon-reload 2>/dev/null || true
+                    """
             ),
             UninstallCommand(
                 id: "entry-state",
@@ -89,7 +89,9 @@ public enum UninstallPlan {
 
     // MARK: Сервер-выход
 
-    public static func exitCommands(dockerSubnet: String, clientSubnet: String?) -> [UninstallCommand] {
+    public static func exitCommands(dockerSubnet: String, clientSubnet: String?)
+        -> [UninstallCommand]
+    {
         var subnets = ["'\(dockerSubnet)'"]
         if let clientSubnet, !clientSubnet.isEmpty {
             subnets.append("'\(clientSubnet)'")
@@ -98,21 +100,21 @@ public enum UninstallPlan {
         // Удаление по номеру правила: MASQUERADE создаётся с `-o <WAN>`, и точное
         // совпадение спецификации при удалении без знания WAN невозможно.
         let natRemoval = """
-        for s in \(subnets.joined(separator: " ")); do
-          while n=$(iptables -t nat -L POSTROUTING --line-numbers -n | awk -v s="$s" '/MASQUERADE/ && index($0, s) {print $1; exit}'); [ -n "$n" ]; do
-            iptables -t nat -D POSTROUTING "$n" 2>/dev/null || break
-          done
-        done
-        """
+            for s in \(subnets.joined(separator: " ")); do
+              while n=$(iptables -t nat -L POSTROUTING --line-numbers -n | awk -v s="$s" '/MASQUERADE/ && index($0, s) {print $1; exit}'); [ -n "$n" ]; do
+                iptables -t nat -D POSTROUTING "$n" 2>/dev/null || break
+              done
+            done
+            """
         return [
             UninstallCommand(
                 id: "exit-stop",
                 title: "Остановка relay и юнитов",
                 command: """
-                awg-quick down awg-relay 2>/dev/null || true
-                systemctl disable --now awg-quick@awg-relay 2>/dev/null || true
-                systemctl disable --now vpn-chain-exit.service 2>/dev/null || true
-                """
+                    awg-quick down awg-relay 2>/dev/null || true
+                    systemctl disable --now awg-quick@awg-relay 2>/dev/null || true
+                    systemctl disable --now vpn-chain-exit.service 2>/dev/null || true
+                    """
             ),
             UninstallCommand(
                 id: "exit-nat",
@@ -123,21 +125,21 @@ public enum UninstallPlan {
                 id: "exit-forward",
                 title: "Удаление FORWARD/INPUT/MSS-правил",
                 command: """
-                while iptables -D FORWARD -i awg-relay -j ACCEPT 2>/dev/null; do :; done
-                while iptables -D FORWARD -o awg-relay -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; do :; done
-                while iptables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; do :; done
-                while iptables -D INPUT -p udp --dport 51828 -j ACCEPT 2>/dev/null; do :; done
-                """
+                    while iptables -D FORWARD -i awg-relay -j ACCEPT 2>/dev/null; do :; done
+                    while iptables -D FORWARD -o awg-relay -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; do :; done
+                    while iptables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; do :; done
+                    while iptables -D INPUT -p udp --dport 51828 -j ACCEPT 2>/dev/null; do :; done
+                    """
             ),
             UninstallCommand(
                 id: "exit-files",
                 title: "Удаление конфигов, скриптов, юнитов и persist-файла",
                 command: """
-                rm -f '/etc/amnezia/amneziawg/awg-relay.conf' '/etc/amnezia/amneziawg/awg-relay.conf.bak.'*
-                rm -f '/usr/local/bin/vpn-chain-exit-rules.sh' '/etc/systemd/system/vpn-chain-exit.service'
-                rm -f '/etc/sysctl.d/99-vpn-chain.conf' '/etc/sysctl.d/99-vpn-chain.conf.bak.'*
-                systemctl daemon-reload 2>/dev/null || true
-                """
+                    rm -f '/etc/amnezia/amneziawg/awg-relay.conf' '/etc/amnezia/amneziawg/awg-relay.conf.bak.'*
+                    rm -f '/usr/local/bin/vpn-chain-exit-rules.sh' '/etc/systemd/system/vpn-chain-exit.service'
+                    rm -f '/etc/sysctl.d/99-vpn-chain.conf' '/etc/sysctl.d/99-vpn-chain.conf.bak.'*
+                    systemctl daemon-reload 2>/dev/null || true
+                    """
             ),
         ]
     }

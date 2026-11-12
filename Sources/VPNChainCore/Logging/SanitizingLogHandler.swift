@@ -39,7 +39,8 @@ public enum SecretRedactor {
         }
         if let regex = try? NSRegularExpression(pattern: privateKeyPattern) {
             let range = NSRange(result.startIndex..., in: result)
-            result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "[REDACTED:private key]")
+            result = regex.stringByReplacingMatches(
+                in: result, range: range, withTemplate: "[REDACTED:private key]")
         }
         return result
     }
@@ -73,22 +74,23 @@ public struct SanitizingLogHandler: LogHandler {
         let redactedMetadata = event.metadata?.mapValues { value in
             Logging.Logger.Metadata.Value(stringLiteral: SecretRedactor.redact("\(value)"))
         }
-        underlying.log(event: LogEvent(
-            level: event.level,
-            message: Logging.Logger.Message(stringLiteral: redacted),
-            error: event.error,
-            metadata: redactedMetadata,
-            source: event.source,
-            file: event.file,
-            function: event.function,
-            line: event.line
-        ))
+        underlying.log(
+            event: LogEvent(
+                level: event.level,
+                message: Logging.Logger.Message(stringLiteral: redacted),
+                error: event.error,
+                metadata: redactedMetadata,
+                source: event.source,
+                file: event.file,
+                function: event.function,
+                line: event.line
+            ))
     }
 }
 
-public extension Logger {
+extension Logger {
     /// Заменяет стандартный bootstrap всего приложения на санитизированный.
-    static func bootstrapSanitized() {
+    public static func bootstrapSanitized() {
         LoggingSystem.bootstrap { label in
             SanitizingLogHandler(underlying: StreamLogHandler.standardOutput(label: label))
         }

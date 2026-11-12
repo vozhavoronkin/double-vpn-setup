@@ -54,7 +54,8 @@ struct DiagnosticsView: View {
         Card(
             title: "Диагностика по симптому",
             systemImage: "stethoscope",
-            subtitle: "Выберите, что происходит, — приложение выполнит доступные проверки на серверах"
+            subtitle:
+                "Выберите, что происходит, — приложение выполнит доступные проверки на серверах"
         ) {
             LabeledField("Симптом") {
                 Picker("Симптом", selection: $viewModel.selectedSymptom) {
@@ -116,8 +117,11 @@ struct DiagnosticsView: View {
                         Label {
                             Text(result.title).font(.callout)
                         } icon: {
-                            Image(systemName: result.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(result.passed ? .green : .red)
+                            Image(
+                                systemName: result.passed
+                                    ? "checkmark.circle.fill" : "xmark.circle.fill"
+                            )
+                            .foregroundStyle(result.passed ? .green : .red)
                         }
                         if let hint = result.hint {
                             Text(hint)
@@ -161,7 +165,8 @@ struct DiagnosticsView: View {
             if guide.suggestsReapply {
                 Banner(
                     kind: .warning,
-                    text: "Перейдите в раздел «Установка» и запустите её заново — движок обновит конфигурацию сервера-выхода."
+                    text:
+                        "Перейдите в раздел «Установка» и запустите её заново — движок обновит конфигурацию сервера-выхода."
                 )
             }
         }
@@ -173,7 +178,8 @@ struct DiagnosticsView: View {
         Card(
             title: "Очистка серверов",
             systemImage: "trash",
-            subtitle: "Удаляются только артефакты с маркером amnezia-chain: юниты, правила, конфиги, /etc/amnezia/chain, persist-файл.",
+            subtitle:
+                "Удаляются только артефакты с маркером amnezia-chain: юниты, правила, конфиги, /etc/amnezia/chain, persist-файл.",
             tint: .red
         ) {
             Text("Контейнер AmneziaVPN и SSH-доступ не затрагиваются.")
@@ -181,9 +187,12 @@ struct DiagnosticsView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Toggle("Также удалить собранное ПО (awg, awg-quick, amneziawg-go)", isOn: $alsoRemoveSoftware)
-                .toggleStyle(.checkbox)
-                .font(.callout)
+            Toggle(
+                "Также удалить собранное ПО (awg, awg-quick, amneziawg-go)",
+                isOn: $alsoRemoveSoftware
+            )
+            .toggleStyle(.checkbox)
+            .font(.callout)
 
             HStack(spacing: 10) {
                 Button("Очистить сервер-вход", role: .destructive) {
@@ -219,7 +228,9 @@ struct DiagnosticsView: View {
                 confirmUninstallRole = nil
             }
         } message: {
-            Text("Будут удалены юниты, правила, конфиги awg-relay и состояние /etc/amnezia/chain. Контейнер AmneziaVPN и SSH останутся рабочими.")
+            Text(
+                "Будут удалены юниты, правила, конфиги awg-relay и состояние /etc/amnezia/chain. Контейнер AmneziaVPN и SSH останутся рабочими."
+            )
         }
     }
 

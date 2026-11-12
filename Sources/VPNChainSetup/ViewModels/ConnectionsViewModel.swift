@@ -40,7 +40,9 @@ final class ConnectionsViewModel: ObservableObject {
         }
 
         func toProfile(role: ServerRole, existing: ConnectionProfile?) -> ConnectionProfile {
-            var profile = existing ?? ConnectionProfile(role: role, host: host, user: user, authKind: authKind)
+            var profile =
+                existing
+                ?? ConnectionProfile(role: role, host: host, user: user, authKind: authKind)
             profile.role = role
             profile.host = host.trimmingCharacters(in: .whitespaces)
             profile.port = Int(port.trimmingCharacters(in: .whitespaces)) ?? 22
@@ -52,7 +54,9 @@ final class ConnectionsViewModel: ObservableObject {
         }
     }
 
-    @Published private(set) var forms: [ServerRole: ProfileForm] = [.entry: ProfileForm(), .exit: ProfileForm()]
+    @Published private(set) var forms: [ServerRole: ProfileForm] = [
+        .entry: ProfileForm(), .exit: ProfileForm(),
+    ]
     @Published private(set) var statuses: [ServerRole: CheckStatus] = [.entry: .idle, .exit: .idle]
 
     private let store: ProfileStore
@@ -156,12 +160,12 @@ final class ConnectionsViewModel: ObservableObject {
             let alert = NSAlert()
             alert.messageText = "Неизвестный сервер"
             alert.informativeText = """
-            Сервер \(host) представился отпечатком:
+                Сервер \(host) представился отпечатком:
 
-            \(fingerprint)
+                \(fingerprint)
 
-            Принять и сохранить его в профиле?
-            """
+                Принять и сохранить его в профиле?
+                """
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Принять")
             alert.addButton(withTitle: "Отклонить")
@@ -199,10 +203,11 @@ enum UserMessages {
         switch check {
         case .profileInvalid(let detail): "Профиль некорректен: \(detail)"
         case .secretMissing(let detail): "Секрет не задан: \(detail)"
-        case .hostKeyChanged: """
-        Отпечаток host key изменился — соединение отклонено. \
-        Если вы переустановили сервер, откройте профиль и подтвердите новый отпечаток.
-        """
+        case .hostKeyChanged:
+            """
+            Отпечаток host key изменился — соединение отклонено. \
+            Если вы переустановили сервер, откройте профиль и подтвердите новый отпечаток.
+            """
         }
     }
 

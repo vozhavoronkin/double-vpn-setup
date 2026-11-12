@@ -73,7 +73,8 @@ struct StatusView: View {
                 EmptyState(
                     systemImage: "gauge.with.dots.needle.67percent",
                     title: "Статус не проверялся",
-                    message: "Обновите статус, чтобы увидеть состояние звеньев, метрики серверов и результаты проверок."
+                    message:
+                        "Обновите статус, чтобы увидеть состояние звеньев, метрики серверов и результаты проверок."
                 ) {
                     Button("Проверить цепочку") {
                         viewModel.refresh()
@@ -218,7 +219,8 @@ struct StatusView: View {
                     if let route = status.routeKillSwitch {
                         MetricRow(
                             title: "Kill-switch",
-                            value: route.defaultViaRelay && route.blackhole ? "активен" : "отсутствует",
+                            value: route.defaultViaRelay && route.blackhole
+                                ? "активен" : "отсутствует",
                             state: route.defaultViaRelay && route.blackhole ? .ok : .error
                         )
                     }
@@ -258,7 +260,8 @@ struct StatusView: View {
                         MetricRow(title: "Handshake", value: "не зафиксирован", state: .error)
                     }
                     statusRow("Порт 51828/UDP слушается", value: status.portListening)
-                    statusRow("MASQUERADE по Docker-подсети", value: status.masqueradeForDockerSubnet)
+                    statusRow(
+                        "MASQUERADE по Docker-подсети", value: status.masqueradeForDockerSubnet)
                 }
             case nil:
                 Text("Нажмите «Обновить»").font(.callout).foregroundStyle(.secondary)
@@ -300,8 +303,11 @@ struct StatusView: View {
                             Label {
                                 Text(result.title).font(.callout)
                             } icon: {
-                                Image(systemName: result.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .foregroundStyle(result.passed ? .green : .red)
+                                Image(
+                                    systemName: result.passed
+                                        ? "checkmark.circle.fill" : "xmark.circle.fill"
+                                )
+                                .foregroundStyle(result.passed ? .green : .red)
                             }
                             if let hint = result.hint {
                                 Text(hint)
@@ -322,10 +328,12 @@ struct StatusView: View {
         Card {
             DisclosureGroup("Ручной чек-лист", isExpanded: $manualChecklistExpanded) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Эти пункты требуют клиента или перезагрузки серверов — выполняются вручную:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Эти пункты требуют клиента или перезагрузки серверов — выполняются вручную:"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     ForEach(ManualChecklist.items) { item in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.title).font(.callout)
@@ -347,7 +355,8 @@ struct StatusView: View {
     @ViewBuilder
     private func statusRow(_ title: String, value: Bool?) -> some View {
         if let value {
-            MetricRow(title: title, value: value ? "ок" : "не на месте", state: value ? .ok : .error)
+            MetricRow(
+                title: title, value: value ? "ок" : "не на месте", state: value ? .ok : .error)
         }
     }
 

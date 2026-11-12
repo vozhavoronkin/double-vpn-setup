@@ -1,10 +1,12 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Тесты задач 5.1–5.3: рендеры конфигурации С2/С1 и правил.
 struct ConfigureStepsTests {
-    private let obf = ObfuscationParams(jc: 5, jmin: 8, jmax: 80, s1: 100, s2: 77, h1: 9, h2: 10, h3: 11, h4: 12)
+    private let obf = ObfuscationParams(
+        jc: 5, jmin: 8, jmax: 80, s1: 100, s2: 77, h1: 9, h2: 10, h3: 11, h4: 12)
 
     // MARK: 5.1 — правила выхода С2
 
@@ -16,7 +18,10 @@ struct ConfigureStepsTests {
         )
         // Идемпотентность: guard-проверки -C перед добавлением.
         #expect(script.contains("iptables -C INPUT -p udp --dport 51828 -j ACCEPT 2>/dev/null ||"))
-        #expect(script.contains("iptables -t nat -C POSTROUTING -s \"$DOCKER_SUBNET\" -o \"$WAN\" -j MASQUERADE 2>/dev/null ||"))
+        #expect(
+            script.contains(
+                "iptables -t nat -C POSTROUTING -s \"$DOCKER_SUBNET\" -o \"$WAN\" -j MASQUERADE 2>/dev/null ||"
+            ))
         // Клиентская подсеть покрывается MASQUERADE.
         #expect(script.contains("-s '10.8.1.0/24' -o \"$WAN\" -j MASQUERADE"))
         // Регрессия приёмки: трафик из туннеля (после SNAT Docker'а на С1) тоже NAT-ится.
@@ -31,13 +36,16 @@ struct ConfigureStepsTests {
     }
 
     @Test func c2RulesScriptWithoutClientSubnet() {
-        let script = ConfigureC2.renderRulesScript(wanInterface: "ens3", dockerSubnet: "172.26.0.0/16", clientSubnet: nil)
+        let script = ConfigureC2.renderRulesScript(
+            wanInterface: "ens3", dockerSubnet: "172.26.0.0/16", clientSubnet: nil)
         #expect(script.contains("клиентская подсеть не обнаружена"))
         #expect(!script.contains("-s '10.8.1.0/24'"))
     }
 
     @Test func c2WANParsing() {
-        #expect(ConfigureC2.parseDefaultInterface("default via 10.0.0.1 dev eth0 proto dhcp metric 100") == "eth0")
+        #expect(
+            ConfigureC2.parseDefaultInterface("default via 10.0.0.1 dev eth0 proto dhcp metric 100")
+                == "eth0")
         #expect(ConfigureC2.parseDefaultInterface("default dev ens3") == "ens3")
         #expect(ConfigureC2.parseDefaultInterface("") == nil)
     }
@@ -50,8 +58,13 @@ struct ConfigureStepsTests {
             dockerSubnet: "172.26.0.0/16",
             clientSubnet: nil
         )
-        let actions = ConfigureC2.actions(configContent: config, wanInterface: "eth0", dockerSubnet: "172.26.0.0/16", clientSubnet: nil)
-        #expect(actions.map { $0.id } == ["c2-config", "c2-preclean", "c2-subnet-collision", "c2-enable-relay", "c2-rules"])
+        let actions = ConfigureC2.actions(
+            configContent: config, wanInterface: "eth0", dockerSubnet: "172.26.0.0/16",
+            clientSubnet: nil)
+        #expect(
+            actions.map { $0.id } == [
+                "c2-config", "c2-preclean", "c2-subnet-collision", "c2-enable-relay", "c2-rules",
+            ])
         // Relay включается отдельным действием.
         #expect(actions[3].apply == SystemdUnits.enableRelayCommand())
         let rules = actions[4].apply
@@ -67,7 +80,8 @@ struct ConfigureStepsTests {
     }
 
     @Test func c2PreCleanRemovesOnlyOurLeftovers() {
-        let preclean = ConfigureC2.preCleanCommand(dockerSubnet: "172.26.0.0/16", clientSubnet: "10.8.1.0/24")
+        let preclean = ConfigureC2.preCleanCommand(
+            dockerSubnet: "172.26.0.0/16", clientSubnet: "10.8.1.0/24")
         // Интерфейс и только наши маршруты (dev awg-relay).
         #expect(preclean.contains("ip link del awg-relay type amneziawg"))
         #expect(preclean.contains("ip route del '172.26.0.0/16' dev awg-relay"))
@@ -88,10 +102,16 @@ struct ConfigureStepsTests {
     // MARK: 5.2 — конфигурация С1
 
     @Test func c1ConfigActionsInOrder() {
-        let config = ConfigTemplates.renderC1(obf: obf, s1PrivateKey: "PRIV1", s2RelayPublicKey: "S2PUB", s2IP: "203.0.113.9")
-        let actions = ConfigureC1.actions(configContent: config, bridge: "br-9f7e5c1a2b3d", clientPort: "44949")
-        #expect(actions.map { $0.id } == ["c1-config", "c1-awgquick-unit", "c1-enable-relay", "c1-rules"])
-        #expect(actions[1].apply.contains("if [ ! -f /etc/systemd/system/awg-quick@.service ]; then"))
+        let config = ConfigTemplates.renderC1(
+            obf: obf, s1PrivateKey: "PRIV1", s2RelayPublicKey: "S2PUB", s2IP: "203.0.113.9")
+        let actions = ConfigureC1.actions(
+            configContent: config, bridge: "br-9f7e5c1a2b3d", clientPort: "44949")
+        #expect(
+            actions.map { $0.id } == [
+                "c1-config", "c1-awgquick-unit", "c1-enable-relay", "c1-rules",
+            ])
+        #expect(
+            actions[1].apply.contains("if [ ! -f /etc/systemd/system/awg-quick@.service ]; then"))
         #expect(actions[3].apply.contains("systemctl restart vpn-chain.service"))
     }
 
@@ -103,9 +123,16 @@ struct ConfigureStepsTests {
         #expect(script.contains("ip rule add fwmark \"$MARK\" table 51821 priority 100"))
         #expect(!script.contains("ip rule add iif"))
         // Ответы контейнера клиентам исключены из туннеля (handshake клиента).
-        #expect(script.contains("iptables -t mangle -A VPNCHAIN_MARK -i \"$BRIDGE\" -p udp --sport \"$CLIENT_PORT\" -j RETURN"))
-        #expect(script.contains("iptables -t mangle -A VPNCHAIN_MARK -i \"$BRIDGE\" -j MARK --set-mark \"$MARK\""))
-        #expect(script.contains("ip6tables -A VPNCHAIN6 -i \"$BRIDGE\" -p udp --sport \"$CLIENT_PORT\" -j RETURN"))
+        #expect(
+            script.contains(
+                "iptables -t mangle -A VPNCHAIN_MARK -i \"$BRIDGE\" -p udp --sport \"$CLIENT_PORT\" -j RETURN"
+            ))
+        #expect(
+            script.contains(
+                "iptables -t mangle -A VPNCHAIN_MARK -i \"$BRIDGE\" -j MARK --set-mark \"$MARK\""))
+        #expect(
+            script.contains(
+                "ip6tables -A VPNCHAIN6 -i \"$BRIDGE\" -p udp --sport \"$CLIENT_PORT\" -j RETURN"))
         // Регрессия приёмки: Docker SNAT клиентского трафика не должен портить источник
         // при уходе в туннель (иначе интернет не отвечает).
         #expect(script.contains("iptables -t nat -I POSTROUTING 1 -o awg-relay -j RETURN"))
@@ -117,7 +144,10 @@ struct ConfigureStepsTests {
         // Цепочки в DOCKER-USER с fallback.
         #expect(script.contains("BASE_CHAIN=DOCKER-USER"))
         #expect(script.contains("DOCKER-USER не найдена, правила добавляются в FORWARD"))
-        #expect(script.contains("iptables -C \"$BASE_CHAIN\" -j VPNCHAIN 2>/dev/null || iptables -I \"$BASE_CHAIN\" 1 -j VPNCHAIN"))
+        #expect(
+            script.contains(
+                "iptables -C \"$BASE_CHAIN\" -j VPNCHAIN 2>/dev/null || iptables -I \"$BASE_CHAIN\" 1 -j VPNCHAIN"
+            ))
         #expect(script.contains("ip6tables -A VPNCHAIN6 -i \"$BRIDGE\" -j DROP"))
         // MSS clamp и возврат трафика.
         #expect(script.contains("--clamp-mss-to-pmtu"))

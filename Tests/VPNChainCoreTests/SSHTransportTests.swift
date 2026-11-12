@@ -2,6 +2,7 @@ import Crypto
 import Foundation
 import NIOSSH
 import Testing
+
 @testable import VPNChainCore
 
 /// Unit-тесты SSH-транспорта задачи 2.1: буферизация вывода, таймауты,
@@ -19,9 +20,9 @@ struct SSHTransportTests {
     }
 
     @Test func assemblerDoesNotSplitMultibyteCharacters() {
-        let full = Array("привет".utf8) // каждый символ 2 байта
+        let full = Array("привет".utf8)  // каждый символ 2 байта
         let assembler = ChunkAssembler()
-        let first = assembler.append(Array(full[..<1])) // разрез посреди первого символа
+        let first = assembler.append(Array(full[..<1]))  // разрез посреди первого символа
         #expect(first.isEmpty)
         let rest = assembler.append(Array(full[1...]))
         #expect(rest == "привет")
@@ -30,7 +31,7 @@ struct SSHTransportTests {
 
     @Test func assemblerHandlesEmojiSplits() {
         let full = "ok 🛡 done"
-        let bytes = Array(full.utf8) // emoji 🛡 — 4 байта
+        let bytes = Array(full.utf8)  // emoji 🛡 — 4 байта
         let assembler = ChunkAssembler()
         // Разрез внутри emoji: "ok " (3 байта) + первый байт emoji.
         let first = assembler.append(Array(bytes[..<4]))
@@ -41,7 +42,7 @@ struct SSHTransportTests {
 
     @Test func assemblerFinalizeFlushesBrokenTail() {
         let assembler = ChunkAssembler()
-        _ = assembler.append([0xF0, 0x9F]) // оборванная 4-байтовая последовательность
+        _ = assembler.append([0xF0, 0x9F])  // оборванная 4-байтовая последовательность
         #expect(assembler.hasPendingBytes)
         #expect(!assembler.finalize().isEmpty)
         #expect(!assembler.hasPendingBytes)
@@ -122,7 +123,8 @@ struct SSHTransportTests {
 
     @Test func fingerprintIsOpenSSHStyle() throws {
         let key = Curve25519.Signing.PrivateKey()
-        let blob = sshString(Array("ssh-ed25519".utf8)) + sshString(Array(key.publicKey.rawRepresentation))
+        let blob =
+            sshString(Array("ssh-ed25519".utf8)) + sshString(Array(key.publicKey.rawRepresentation))
         let openSSH = "ssh-ed25519 \(Data(blob).base64EncodedString())"
         let publicKey = try NIOSSHPublicKey(openSSHPublicKey: openSSH)
         let fingerprint = SSHClient.fingerprint(of: publicKey)
@@ -143,7 +145,9 @@ struct SSHTransportTests {
             .appendingPathComponent("vpnchain-keys-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let privatePath = directory.appendingPathComponent("id_\(type)").path
-        var arguments = ["-t", type, "-N", passphrase ?? "", "-C", comment, "-q", "-f", privatePath]
+        var arguments = [
+            "-t", type, "-N", passphrase ?? "", "-C", comment, "-q", "-f", privatePath,
+        ]
         if let bits {
             arguments.insert(contentsOf: ["-b", String(bits)], at: 2)
         }
@@ -158,8 +162,10 @@ struct SSHTransportTests {
             throw SSHError.keyParsing("ssh-keygen сгенерировал ошибку для \(type)")
         }
         let privateData = try Data(contentsOf: URL(fileURLWithPath: privatePath))
-        let publicLine = try String(contentsOf: URL(fileURLWithPath: privatePath + ".pub"), encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let publicLine = try String(
+            contentsOf: URL(fileURLWithPath: privatePath + ".pub"), encoding: .utf8
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
         defer { try? FileManager.default.removeItem(at: directory) }
         return (privateData, publicLine, URL(fileURLWithPath: privatePath))
     }
@@ -170,7 +176,8 @@ struct SSHTransportTests {
 
     @Test func parsesUnencryptedEd25519Key() throws {
         let generated = try generateKey(type: "ed25519", passphrase: nil)
-        let material = try OpenSSHPrivateKeyFile.load(from: generated.privateKeyData, passphrase: nil)
+        let material = try OpenSSHPrivateKeyFile.load(
+            from: generated.privateKeyData, passphrase: nil)
         #expect(material.algorithm == "ssh-ed25519")
         #expect(
             material.publicKeyOpenSSH == publicKeyTokens(generated.publicKeyLine),
@@ -180,7 +187,8 @@ struct SSHTransportTests {
 
     @Test func parsesEncryptedEd25519KeyWithPassphrase() throws {
         let generated = try generateKey(type: "ed25519", passphrase: "секрет-123")
-        let material = try OpenSSHPrivateKeyFile.load(from: generated.privateKeyData, passphrase: "секрет-123")
+        let material = try OpenSSHPrivateKeyFile.load(
+            from: generated.privateKeyData, passphrase: "секрет-123")
         #expect(material.algorithm == "ssh-ed25519")
         #expect(material.publicKeyOpenSSH == publicKeyTokens(generated.publicKeyLine))
     }

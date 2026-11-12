@@ -118,7 +118,9 @@ struct InstallView: View {
     private var stepsKind: StatusKind {
         if viewModel.running { return .progress }
         if viewModel.steps.contains(where: { $0.state == .failed }) { return .error }
-        if viewModel.completedCount == viewModel.steps.count, !viewModel.steps.isEmpty { return .ok }
+        if viewModel.completedCount == viewModel.steps.count, !viewModel.steps.isEmpty {
+            return .ok
+        }
         return .neutral
     }
 
@@ -142,7 +144,8 @@ struct InstallView: View {
                     .font(.callout)
                     .foregroundStyle(step.state == .pending ? .secondary : .primary)
                 if let detail = step.detail,
-                   step.state == .done || step.state == .failed || step.state == .skipped {
+                    step.state == .done || step.state == .failed || step.state == .skipped
+                {
                     Text(detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -160,20 +163,22 @@ struct InstallView: View {
     }
 
     private func stepIcon(state: StepProgress.State) -> some View {
-        let kind: StatusKind = switch state {
-        case .pending: .neutral
-        case .running: .progress
-        case .done: .ok
-        case .failed: .error
-        case .skipped: .neutral
-        }
-        let symbol = switch state {
-        case .pending: "circle.dashed"
-        case .running: "arrow.triangle.2.circlepath"
-        case .done: "checkmark.circle.fill"
-        case .failed: "xmark.octagon.fill"
-        case .skipped: "minus.circle"
-        }
+        let kind: StatusKind =
+            switch state {
+            case .pending: .neutral
+            case .running: .progress
+            case .done: .ok
+            case .failed: .error
+            case .skipped: .neutral
+            }
+        let symbol =
+            switch state {
+            case .pending: "circle.dashed"
+            case .running: "arrow.triangle.2.circlepath"
+            case .done: "checkmark.circle.fill"
+            case .failed: "xmark.octagon.fill"
+            case .skipped: "minus.circle"
+            }
         return Image(systemName: symbol)
             .font(.callout)
             .foregroundStyle(kind.tint)

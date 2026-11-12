@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import VPNChainCore
 
 /// Тесты задачи 4.3: версии Go, tarball, план установки.
@@ -7,7 +8,9 @@ struct SoftwareInstallTests {
     // MARK: Версии Go
 
     @Test func parsesGoModDirective() {
-        #expect(SoftwareInstallPlan.requiredGoVersion(goMod: "module github.com/amnezia-vpn/amneziawg-go\n\ngo 1.23.0\n") == "1.23.0")
+        #expect(
+            SoftwareInstallPlan.requiredGoVersion(
+                goMod: "module github.com/amnezia-vpn/amneziawg-go\n\ngo 1.23.0\n") == "1.23.0")
         #expect(SoftwareInstallPlan.requiredGoVersion(goMod: "go 1.23\n") == "1.23.0")
         #expect(SoftwareInstallPlan.requiredGoVersion(goMod: "module x\n") == nil)
     }
@@ -33,7 +36,8 @@ struct SoftwareInstallTests {
 
     @Test func goBinaryDecisionCases() {
         #expect(
-            SoftwareInstallPlan.goBinaryDecision(goModOutput: "go 1.23.0", goVersionOutput: "go version go1.19 linux/amd64")
+            SoftwareInstallPlan.goBinaryDecision(
+                goModOutput: "go 1.23.0", goVersionOutput: "go version go1.19 linux/amd64")
                 == .fallbackRequired(required: "1.23.0")
         )
         #expect(
@@ -41,18 +45,24 @@ struct SoftwareInstallTests {
                 == .fallbackRequired(required: "1.23.0")
         )
         #expect(
-            SoftwareInstallPlan.goBinaryDecision(goModOutput: "go 1.23.0", goVersionOutput: "go version go1.23.4 linux/amd64")
+            SoftwareInstallPlan.goBinaryDecision(
+                goModOutput: "go 1.23.0", goVersionOutput: "go version go1.23.4 linux/amd64")
                 == .systemSufficient
         )
         #expect(
-            SoftwareInstallPlan.goBinaryDecision(goModOutput: "module x", goVersionOutput: "go version go1.23.4 linux/amd64")
+            SoftwareInstallPlan.goBinaryDecision(
+                goModOutput: "module x", goVersionOutput: "go version go1.23.4 linux/amd64")
                 == .invalid("в go.mod нет директивы go")
         )
     }
 
     @Test func tarballNamesPerArch() {
-        #expect(SoftwareInstallPlan.goTarballName(required: "1.23.0", arch: .x86_64) == "go1.23.0.linux-amd64.tar.gz")
-        #expect(SoftwareInstallPlan.goTarballName(required: "1.23", arch: .aarch64) == "go1.23.0.linux-arm64.tar.gz")
+        #expect(
+            SoftwareInstallPlan.goTarballName(required: "1.23.0", arch: .x86_64)
+                == "go1.23.0.linux-amd64.tar.gz")
+        #expect(
+            SoftwareInstallPlan.goTarballName(required: "1.23", arch: .aarch64)
+                == "go1.23.0.linux-arm64.tar.gz")
     }
 
     // MARK: План установки
@@ -84,14 +94,17 @@ struct SoftwareInstallTests {
     @Test func goFallbackActionDownloadsFileNotPipe() {
         let action = SoftwareInstallPlan.goFallbackAction(required: "1.23.0", arch: .aarch64)
         // ТЗ раздел 5: никаких curl | bash — только скачивание в файл.
-        #expect(action.apply.contains("curl -fL https://go.dev/dl/go1.23.0.linux-arm64.tar.gz -o /tmp/go.tar.gz"))
+        #expect(
+            action.apply.contains(
+                "curl -fL https://go.dev/dl/go1.23.0.linux-arm64.tar.gz -o /tmp/go.tar.gz"))
         #expect(action.apply.contains("tar -C /usr/local -xzf /tmp/go.tar.gz"))
         #expect(!action.apply.contains("curl | bash"))
-        #expect(action.check == nil) // движок добавляет шаг по решению goBinaryDecision
+        #expect(action.check == nil)  // движок добавляет шаг по решению goBinaryDecision
     }
 
     @Test func goBuildUsesFallbackPath() {
-        let actions = SoftwareInstallPlan.actions(platform: ServerPlatform(os: .ubuntu, majorVersion: 22, arch: .x86_64))
+        let actions = SoftwareInstallPlan.actions(
+            platform: ServerPlatform(os: .ubuntu, majorVersion: 22, arch: .x86_64))
         let goBuild = actions.first { $0.id == "go-build" }
         #expect(goBuild?.apply.contains("PATH=/usr/local/go/bin:$PATH") == true)
         #expect(goBuild?.check?.contains("command -v amneziawg-go") == true)
@@ -124,6 +137,8 @@ struct SystemdUnitsTests {
     @Test func relayEnableCommand() {
         // Restart обязателен: enable --now для активного юнита — no-op, и новый
         // конфиг/бинарник не вступили бы в силу (регрессия приёмки).
-        #expect(SystemdUnits.enableRelayCommand() == "systemctl enable awg-quick@awg-relay && systemctl restart awg-quick@awg-relay")
+        #expect(
+            SystemdUnits.enableRelayCommand()
+                == "systemctl enable awg-quick@awg-relay && systemctl restart awg-quick@awg-relay")
     }
 }

@@ -34,9 +34,11 @@ public enum OpenSSHPrivateKeyFile {
             throw SSHError.keyParsing("Ключ зашифрован: требуется парольная фраза")
         }
         let plainData = try stripPassphrase(pemData: pemData, passphrase: passphrase)
-        let (plainCipher, plainBody) = try parseEnvelope(armor: String(decoding: plainData, as: UTF8.self))
+        let (plainCipher, plainBody) = try parseEnvelope(
+            armor: String(decoding: plainData, as: UTF8.self))
         guard plainCipher == "none" else {
-            throw SSHError.keyParsing("Не удалось снять парольную фразу с ключа (cipher=\(plainCipher))")
+            throw SSHError.keyParsing(
+                "Не удалось снять парольную фразу с ключа (cipher=\(plainCipher))")
         }
         return try parsePlain(body: plainBody)
     }
@@ -45,7 +47,8 @@ public enum OpenSSHPrivateKeyFile {
 
     /// Возвращает имя cipher и расшифрованное тело приватной части.
     private static func parseEnvelope(armor: String) throws -> (cipher: String, body: [UInt8]) {
-        let bodyLines = armor
+        let bodyLines =
+            armor
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.hasPrefix("-----") }
@@ -60,13 +63,13 @@ public enum OpenSSHPrivateKeyFile {
         bytes.removeFirst(magic.count)
         var reader = SSHWireReader(bytes: bytes)
         let cipher = try reader.readString()
-        _ = try reader.readString() // kdfname
-        _ = try reader.readString() // kdfoptions
+        _ = try reader.readString()  // kdfname
+        _ = try reader.readString()  // kdfoptions
         let numKeys = try reader.readUInt32()
         guard numKeys == 1 else {
             throw SSHError.keyParsing("Файл содержит \(numKeys) ключей, поддерживается один")
         }
-        _ = try reader.readBytes() // public key blob
+        _ = try reader.readBytes()  // public key blob
         let privateSection = try reader.readBytes()
         return (cipher: cipher, body: privateSection)
     }
@@ -96,7 +99,8 @@ public enum OpenSSHPrivateKeyFile {
             let publicBlob = try reader.readBytes()
             let privateBlob = try reader.readBytes()
             guard privateBlob.count == 64 else {
-                throw SSHError.keyParsing("Некорректная длина приватного ключа ed25519: \(privateBlob.count)")
+                throw SSHError.keyParsing(
+                    "Некорректная длина приватного ключа ed25519: \(privateBlob.count)")
             }
             let seed = Array(privateBlob[..<32])
             let key: Curve25519.Signing.PrivateKey
@@ -137,9 +141,11 @@ public enum OpenSSHPrivateKeyFile {
         }
     }
 
-    private static func parseECDSA(algorithm: String, reader: inout SSHWireReader) throws -> NIOSSHPrivateKey {
-        _ = try reader.readString() // имя кривой
-        _ = try reader.readBytes() // публичная точка
+    private static func parseECDSA(algorithm: String, reader: inout SSHWireReader) throws
+        -> NIOSSHPrivateKey
+    {
+        _ = try reader.readString()  // имя кривой
+        _ = try reader.readBytes()  // публичная точка
         var scalar = try reader.readBytes()
         switch algorithm {
         case "ecdsa-sha2-nistp256":
@@ -204,8 +210,11 @@ struct SSHWireReader {
     }
 
     mutating func readUInt32() throws -> UInt32 {
-        guard bytes.count >= offset + 4 else { throw SSHError.keyParsing("Обрыв данных wire-формата") }
-        let value = UInt32(bytes[offset]) << 24 | UInt32(bytes[offset + 1]) << 16
+        guard bytes.count >= offset + 4 else {
+            throw SSHError.keyParsing("Обрыв данных wire-формата")
+        }
+        let value =
+            UInt32(bytes[offset]) << 24 | UInt32(bytes[offset + 1]) << 16
             | UInt32(bytes[offset + 2]) << 8 | UInt32(bytes[offset + 3])
         offset += 4
         return value
@@ -213,7 +222,9 @@ struct SSHWireReader {
 
     mutating func readBytes() throws -> [UInt8] {
         let length = Int(try readUInt32())
-        guard bytes.count >= offset + length else { throw SSHError.keyParsing("Обрыв данных wire-формата") }
+        guard bytes.count >= offset + length else {
+            throw SSHError.keyParsing("Обрыв данных wire-формата")
+        }
         let slice = Array(bytes[offset..<(offset + length)])
         offset += length
         return slice

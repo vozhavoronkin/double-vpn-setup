@@ -58,7 +58,9 @@ public final class ProfileStore: @unchecked Sendable {
     /// Удаляет только секреты профиля (профиль остаётся).
     public func deleteSecrets(profileID: UUID) {
         if let password = password(profileID: profileID) { SecretRedactor.unregister(password) }
-        if let passphrase = passphrase(profileID: profileID) { SecretRedactor.unregister(passphrase) }
+        if let passphrase = passphrase(profileID: profileID) {
+            SecretRedactor.unregister(passphrase)
+        }
         keychain.deleteAllSecrets(profileID: profileID)
     }
 
