@@ -42,6 +42,14 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           body: |
+            Установка одной командой:
+            ```
+            curl -fsSL https://github.com/vozhavoronkin/double-vpn-setup/releases/latest/download/install.sh | bash
+            ```
+            Скрипт скачает zip и `SHA256SUMS.txt`, сверит SHA256, распакует архив
+            и установит `VPNChainSetup.app` в `/Applications` (`sudo` — при необходимости).
+
+            Ручная установка: скачайте zip, распакуйте и перенесите приложение в `/Applications`.
             Сборка без подписи Apple: при первом запуске снимите карантин —
             `xattr -dr com.apple.quarantine /Applications/VPNChainSetup.app`
             (или «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть»).
@@ -51,3 +59,4 @@ jobs:
           files: |
             VPNChainSetup-*-macos-universal.zip
             SHA256SUMS.txt
+            scripts/install.sh
