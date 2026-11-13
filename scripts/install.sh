@@ -38,12 +38,14 @@ resolve_version() {
             *) tag="v${requested}" ;;
         esac
         echo "Версия: ${tag}" >&2
-        if ! curl -fsIL -o /dev/null "https://github.com/${REPO}/releases/tag/${tag}"; then
+        if ! curl -fsIL -o /dev/null --connect-timeout 15 --max-time 60 \
+            "https://github.com/${REPO}/releases/tag/${tag}"; then
             die "релиз ${tag} не найден"
         fi
     else
         local latest_url
         latest_url="$(curl -fsIL -o /dev/null -w '%{url_effective}' \
+            --connect-timeout 15 --max-time 60 \
             "https://github.com/${REPO}/releases/latest")" \
             || die "не удалось определить последний релиз (проверьте доступ к github.com)"
         tag="${latest_url##*/}"
@@ -62,8 +64,10 @@ ZIP_NAME="VPNChainSetup-${VERSION}-macos-universal.zip"
 BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 
 echo "Скачивание ${ZIP_NAME} и SHA256SUMS.txt..."
-curl -fSL --retry 3 --retry-delay 2 -o "${TMP_DIR}/${ZIP_NAME}" "${BASE_URL}/${ZIP_NAME}"
-curl -fSL --retry 3 --retry-delay 2 -o "${TMP_DIR}/SHA256SUMS.txt" "${BASE_URL}/SHA256SUMS.txt"
+curl -fSL --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 300 \
+    -o "${TMP_DIR}/${ZIP_NAME}" "${BASE_URL}/${ZIP_NAME}"
+curl -fSL --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 300 \
+    -o "${TMP_DIR}/SHA256SUMS.txt" "${BASE_URL}/SHA256SUMS.txt"
 
 echo "Проверка контрольной суммы..."
 EXPECTED="$(awk -v f="${ZIP_NAME}" '$2 == f {print $1; exit}' "${TMP_DIR}/SHA256SUMS.txt")"
@@ -88,10 +92,14 @@ if xattr -p com.apple.quarantine "${APP_PATH}" >/dev/null 2>&1; then
 fi
 
 echo "Установка в /Applications..."
-if ! { rm -rf "${DEST}" && ditto "${APP_PATH}" "${DEST}"; } 2>/dev/null; then
-    echo "Нужны права администратора (sudo)..."
-    sudo rm -rf "${DEST}" || die "не удалось удалить прежнюю версию из /Applications"
-    sudo ditto "${APP_PATH}" "${DEST}" || die "не удалось скопировать приложение в /Applications"
+echo "Если VPNChainSetup запущен — закройте его: после обновления понадобится перезапуск."
+if ! { rm -rf "${DEST}.new" && ditto "${APP_PATH}" "${DEST}.new" \
+    && rm -rf "${DEST}" && mv "${DEST}.new" "${DEST}"; } 2>/dev/null; then
+    echo "Первая попытка не удалась; повтор с правами администратора (sudo)..."
+    sudo rm -rf "${DEST}.new" || die "не удалось подготовить место в /Applications"
+    sudo ditto "${APP_PATH}" "${DEST}.new" || die "не удалось скопировать приложение в /Applications"
+    sudo rm -rf "${DEST}" && sudo mv "${DEST}.new" "${DEST}" \
+        || die "не удалось заменить приложение в /Applications"
 fi
 
 echo
