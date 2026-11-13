@@ -34,6 +34,29 @@ swift test                 # 178 unit-тестов core-модуля
 
 ## Установка из релиза
 
+### Одной командой (рекомендуется)
+
+```bash
+curl -fsSL https://github.com/vozhavoronkin/double-vpn-setup/releases/latest/download/install.sh | bash
+```
+
+Скрипт скачает zip и `SHA256SUMS.txt`, сверит SHA256 (при несовпадении установка отменяется
+без изменений в системе), распакует архив, снимет карантинный флаг и установит
+`VPNChainSetup.app` в `/Applications` (`sudo` — только при необходимости).
+Перед установкой закройте приложение, если оно запущено: после обновления понадобится перезапуск.
+
+Конкретная версия:
+
+```bash
+curl -fsSL -O https://github.com/vozhavoronkin/double-vpn-setup/releases/download/vX.Y.Z/install.sh
+bash install.sh vX.Y.Z
+```
+
+`install.sh` публикуется в релизах начиная с версии, где появился скрипт; для более
+старых релизов используйте ручной способ ниже.
+
+### Вручную (альтернатива)
+
 1. Скачайте `VPNChainSetup-<версия>-macos-universal.zip` со страницы [Releases](../../releases) и распакуйте.
 2. Перенесите `VPNChainSetup.app` в «Программы».
 3. **Сборка не подписана Apple.** При первом запуске macOS покажет предупреждение. Снимите карантин одним из способов:

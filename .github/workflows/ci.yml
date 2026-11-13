@@ -17,6 +17,9 @@ jobs:
       - name: swift-format lint
         run: xcrun swift-format lint --strict -r -p Sources Tests Package.swift
 
+      - name: Синтаксис install.sh
+        run: bash -n scripts/install.sh
+
   test:
     runs-on: macos-15
     steps:
